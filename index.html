@@ -4,92 +4,121 @@
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Memory：Me&GPT</title>
 <style>
-/* —— 语义色与组件用色 —— */
-body{font-family:system-ui,Segoe UI,Roboto;max-width:960px;margin:32px auto;padding:16px;line-height:1.6;background:var(--bg);color:var(--text)}
-h1{margin:0 0 12px}
-.card{padding:12px;border:1px solid var(--border);background:var(--surface);margin:10px 0;border-radius:12px}
-.row{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
-.row>label{display:flex;align-items:center;gap:6px}
-.badge{display:inline-block;padding:2px 8px;border-radius:999px;background:var(--accent);color:#fff;margin-left:6px}
-button{padding:6px 10px;border-radius:10px;border:1px solid var(--border);background:var(--surface);color:var(--text);cursor:pointer}
-button:hover{filter:brightness(0.98)}
-.theme{font-weight:600}
-.theme[aria-pressed="true"]{outline:2px solid var(--accent)}
-input[type="text"]{padding:6px 8px;border-radius:8px;border:1px solid var(--border);background:var(--surface);color:var(--text)}
-input[type="radio"]{accent-color:var(--accent)}
-small{opacity:.8}
-@media (max-width:640px){ body{margin:16px auto;padding:12px} }
+/* —— Base: 扁平化、无边框、统一圆角 —— */
+:root{ --radius:16px }
+body{
+  font-family:"Helvetica Neue", Helvetica, Lato, Futura, system-ui, Segoe UI, Roboto;
+  max-width:1080px; margin:32px auto; padding:16px; line-height:1.6;
+  background:var(--bg); color:var(--text);
+}
+h1{ font-size:28px; font-weight:800; letter-spacing:.2px; margin:0 0 16px }
+.h2{ font-size:18px; font-weight:700; margin:0 0 8px }
+.mono{ font-variant-numeric:tabular-nums }
+.muted{ opacity:.76 }
+.card{
+  background:var(--card); border:none; border-radius:var(--radius);
+  padding:16px; margin:12px 0;
+}
+.grid{
+  display:grid; gap:12px;
+  grid-template-columns: repeat(12, minmax(0,1fr));
+}
+.col-12{grid-column:span 12}
+.col-6{grid-column:span 6}
+.col-4{grid-column:span 4}
+.col-8{grid-column:span 8}
+@media (max-width:860px){ .col-6,.col-4,.col-8{grid-column:span 12} }
 
-/* —— 主题映射：用 data-theme 切换 —— */
-/* Echoes（#b6aac6、#9f9bc2、#9ebec3、#d8e6e8） */
+.row{ display:flex; gap:10px; flex-wrap:wrap; align-items:center }
+.input{ padding:8px 10px; border:none; border-radius:12px; background:var(--surface); color:var(--text) }
+button{ padding:8px 12px; border:none; border-radius:12px; background:var(--accent); color:var(--accent-contrast); cursor:pointer; font-weight:600 }
+button.ghost{ background:var(--surface); color:var(--text) }
+.theme{ font-weight:700; padding:6px 10px }
+.theme[aria-pressed="true"]{ outline:2px solid var(--accent) }
+.badge{ display:inline-block; padding:2px 8px; border-radius:999px; background:var(--accent); color:var(--accent-contrast); font-weight:700 }
+
+/* —— 主题（语义色：bg 最浅 / card 次浅 / surface 控件底 / accent 强调） —— */
 body[data-theme="Echoes"]{
-  --bg:#d8e6e8;      /* 最浅：底 */
-  --surface:#9f9bc2; /* 次浅：卡片 */
-  --border:#9ebec3;  /* 边框 */
-  --accent:#b6aac6;  /* 强调 */
-  --text:#111;       /* 文字 */
+  --bg:#d8e6e8; --card:#cddbe0; --surface:#9f9bc2; --accent:#b6aac6; --accent-contrast:#fff; --text:#111;
 }
-/* Logic（#febcbf、#feddcc、#aac1b0、#c94b63） */
 body[data-theme="Logic"]{
-  --bg:#feddcc;      /* 用最浅蜜桃做底，避免红底压字 */
-  --surface:#febcbf; /* 卡片略深 */
-  --border:#aac1b0;  /* 冷绿描边压住暖色 */
-  --accent:#c94b63;  /* 深红仅做强调 */
-  --text:#1a1a1a;    /* 深色文字，阅读性强 */
+  --bg:#feddcc; --card:#ffd9cf; --surface:#febcbf; --accent:#c94b63; --accent-contrast:#fff; --text:#1a1a1a;
 }
-/* Emotion（#f5f0bd、#dbdfab、#b3c893、#75a9ae） */
 body[data-theme="Emotion"]{
-  --bg:#f5f0bd;
-  --surface:#dbdfab;
-  --border:#b3c893;
-  --accent:#75a9ae;
-  --text:#102010;
+  --bg:#f5f0bd; --card:#e7e4b1; --surface:#dbdfab; --accent:#75a9ae; --accent-contrast:#fff; --text:#102010;
 }
-
-/* 小屏优化 */
-@media (max-width:640px){ body{margin:16px auto;padding:12px} }
 </style>
+
 <body data-theme="Echoes">
   <h1 id="title">Memory：Me&GPT</h1>
 
+  <!-- 控制条 -->
   <div class="card">
     <div class="row">
-      <label>我方显示名（user）<input id="userName" placeholder="Me" type="text"></label>
-      <label>对方显示名（assistant）<input id="assistantName" placeholder="GPT" type="text"></label>
+      <label>我方显示名（user）<input id="userName" class="input" placeholder="Me" type="text"></label>
+      <label>对方显示名（assistant）<input id="assistantName" class="input" placeholder="GPT" type="text"></label>
       <button id="saveNames">保存并应用</button>
-      <button id="resetNames">重置</button>
-      <span class="badge" id="filterInfo">仅近三月统计</span>
+      <button id="resetNames" class="ghost">重置</button>
+      <span class="badge">仅近三月统计</span>
     </div>
-    <div class="row">
+    <div class="row" style="margin-top:8px">
       <label><input type="radio" name="filter" value="simple" checked> 简单过滤</label>
       <label><input type="radio" name="filter" value="deep"> 深度过滤</label>
       <span style="flex:1"></span>
-      <span>主题：</span>
-      <button class="theme" data-theme="Echoes" aria-pressed="true">Echoes</button>
-      <button class="theme" data-theme="Logic" aria-pressed="false">Logic</button>
-      <button class="theme" data-theme="Emotion" aria-pressed="false">Emotion</button>
+      <span class="muted">主题：</span>
+      <button class="theme ghost" data-theme="Echoes" aria-pressed="true">Echoes</button>
+      <button class="theme ghost" data-theme="Logic" aria-pressed="false">Logic</button>
+      <button class="theme ghost" data-theme="Emotion" aria-pressed="false">Emotion</button>
     </div>
   </div>
 
+  <!-- 文件与预检 -->
   <div class="card">
     <div class="row">
-      <input type="file" id="file" accept=".json">
+      <input type="file" id="file" class="input" accept=".json">
       <button id="runPrecheck">结构预检</button>
-      <small id="status">未加载文件</small>
+      <span id="status" class="muted">未加载文件</span>
     </div>
   </div>
 
-  <div class="card">
-    <strong>核心指标（占位，稍后接入统计）</strong>
-    <ul>
-      <li><span id="uChars">0</span> / <span id="aChars">0</span> 字数（按 <span id="nameU">Me</span> / <span id="nameA">GPT</span>）</li>
-      <li><span id="uMsgs">0</span> / <span id="aMsgs">0</span> 条数（按 <span id="nameU2">Me</span> / <span id="nameA2">GPT</span>）</li>
-      <li>最早对话创建时间：<span id="earliest">—</span>（本地时区，精确到小时）</li>
-      <li>已连续对话天数：当前 <span id="streakNow">—</span>；最长 <span id="streakMax">—</span></li>
-      <li>最常聊天时段：<span id="hotSlot">—</span></li>
-      <li>最近三月月历字数：<span id="monthHint">将以纯文本呈现</span></li>
-      <li>关键词 Top10（近三月，<span id="modeText">简单过滤</span>）：<span id="kw">—</span></li>
-    </ul>
+  <!-- 指标分卡片布局 -->
+  <div class="grid">
+    <!-- 概览：总字数/总条数（双向） -->
+    <div class="card col-12">
+      <div class="h2">概览 Overview</div>
+      <div class="row">
+        <div><strong id="nameU">Me</strong>：<span id="uChars" class="mono">0</span> 字・<span id="uMsgs" class="mono">0</span> 条</div>
+        <div><strong id="nameA">GPT</strong>：<span id="aChars" class="mono">0</span> 字・<span id="aMsgs" class="mono">0</span> 条</div>
+      </div>
+    </div>
+
+    <!-- 时间信息：最早时间 + 最常时段 -->
+    <div class="card col-6">
+      <div class="h2">时间 Time</div>
+      <div>最早对话创建时间：<strong id="earliest">—</strong> <span class="muted">（本地时区，精确到小时）</span></div>
+      <div style="margin-top:6px">最常聊天时段：<strong id="hotSlot">—</strong></div>
+    </div>
+
+    <!-- 连续天数 -->
+    <div class="card col-6">
+      <div class="h2">连续天数 Streak</div>
+      <div>当前：<strong id="streakNow">—</strong></div>
+      <div>最长：<strong id="streakMax">—</strong></div>
+      <div class="muted" style="margin-top:6px">活跃日＝当天 <span id="nameU2">Me</span>/<span id="nameA2">GPT</span> 任一有消息</div>
+    </div>
+
+    <!-- 近三月月历字数（纯文本） -->
+    <div class="card col-12">
+      <div class="h2">最近三月字数分布 Monthly</div>
+      <div id="monthHint" class="muted">将以纯文本呈现</div>
+      <div id="monthGrid"></div>
+    </div>
+
+    <!-- 关键词 Top10（纯文本卡片） -->
+    <div class="card col-12">
+      <div class="h2">关键词 Top10（近三月，<span id="modeText">简单过滤</span>）</div>
+      <div id="kw" class="row"></div>
+    </div>
   </div>
 
   <script type="module" src="./app.js"></script>
