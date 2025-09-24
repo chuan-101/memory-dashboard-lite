@@ -1,0 +1,56 @@
+<!doctype html>
+<html lang="zh-CN">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Memory：Me&GPT</title>
+<style>
+:root{--c1:#b6aac6;--c2:#9f9bc2;--c3:#9ebec3;--c4:#d8e6e8;}
+body{font-family:system-ui,Segoe UI,Roboto;max-width:960px;margin:32px auto;padding:16px;line-height:1.6}
+h1{margin:0 0 12px}
+.card{padding:12px;border:1px solid var(--c3);background:var(--c4);margin:10px 0;border-radius:12px}
+.row{display:flex;gap:8px;flex-wrap:wrap}
+.row>label{display:flex;align-items:center;gap:6px}
+.badge{display:inline-block;padding:2px 8px;border-radius:999px;background:var(--c2);color:#fff;margin-left:6px}
+small{opacity:.75}
+</style>
+<body>
+  <h1 id="title">Memory：Me&GPT</h1>
+
+  <div class="card">
+    <div class="row">
+      <label>我方显示名（user）<input id="userName" placeholder="Me"></label>
+      <label>对方显示名（assistant）<input id="assistantName" placeholder="GPT"></label>
+      <button id="saveNames">保存并应用</button>
+      <button id="resetNames">重置</button>
+    </div>
+    <div class="row">
+      <label><input type="radio" name="filter" value="simple" checked> 简单过滤</label>
+      <label><input type="radio" name="filter" value="deep"> 深度过滤</label>
+      <span class="badge" id="filterInfo">仅近三月统计</span>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="row">
+      <input type="file" id="file" accept=".json">
+      <button id="runPrecheck">结构预检</button>
+      <small id="status">未加载文件</small>
+    </div>
+  </div>
+
+  <div class="card">
+    <strong>核心指标（占位，稍后接入统计）</strong>
+    <ul>
+      <li><span id="uChars">0</span> / <span id="aChars">0</span> 字数（按 <span id="nameU">Me</span> / <span id="nameA">GPT</span>）</li>
+      <li><span id="uMsgs">0</span> / <span id="aMsgs">0</span> 条数（按 <span id="nameU2">Me</span> / <span id="nameA2">GPT</span>）</li>
+      <li>最早对话创建时间：<span id="earliest">—</span>（本地时区，精确到小时）</li>
+      <li>已连续对话天数：当前 <span id="streakNow">—</span>；最长 <span id="streakMax">—</span></li>
+      <li>最常聊天时段：<span id="hotSlot">—</span></li>
+      <li>最近三月月历字数：<span id="monthHint">将以纯文本呈现</span></li>
+      <li>关键词 Top10（近三月，<span id="modeText">简单过滤</span>）：<span id="kw">—</span></li>
+    </ul>
+  </div>
+
+  <script type="module" src="./app.js"></script>
+</body>
+</html>
