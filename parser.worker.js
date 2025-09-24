@@ -1,18 +1,58 @@
-self.onmessage = async (e)=>{
-  const {type, file} = e.data || {};
-  if(type==='precheck'){
-    try{
-      const chunk = await file.slice(0, 1024 * 1024).text(); // 读前 1MB 作为结构探针
-      const looksLikeMapping = /"mapping"\s*:\s*\{/.test(chunk) && /"message"\s*:\s*\{/.test(chunk);
-      const looksLikeMessages = /"messages"\s*:\s*\[/.test(chunk); // 兼容其他导出形态
-      if(looksLikeMapping || looksLikeMessages){
-        const hint = looksLikeMapping ? 'mapping/message 结构' : 'messages 数组结构';
-        postMessage({type:'precheck', ok:true, hint});
-      } else {
-        postMessage({type:'precheck', ok:false, reason:'未检测到 mapping/message 或 messages 关键结构'});
-      }
-    }catch(err){
-      postMessage({type:'precheck', ok:false, reason: String(err && err.message || err)});
-    }
-  }
+self.onmessage = async (e) => {
+  const { type, file, mode = 'simple' } = e.data || {};
+  if (type === 'precheck') return precheck(file);
+  if (type === 'parse')    return streamOnly(file, mode);
 };
+
+async function precheck(file){
+  try{
+    const chunk = await file.slice(0, 1024 * 1024).text();
+    const looksMapping  = /"mapping"\s*:\s*\{/.test(chunk) && /"message"\s*:\s*\{/.test(chunk);
+    const looksMessages = /"messages"\s*:\s*\[/.test(chunk);
+    postMessage({ type:'precheck', ok:(looksMapping || looksMessages),
+      hint: looksMapping ? 'mapping/message' : (looksMessages ? 'messages[]' : '') });
+  }catch(err){
+    postMessage({ type:'precheck', ok:false, reason:String(err?.message||err) });
+  }
+}
+
+async function streamOnly(file, mode){
+  try{
+    const reader = file.stream().getReader();
+    const td = new TextDecoder();
+    let loaded = 0, lastTick = 0, done = false;
+
+    while(!done){
+      const { value, done: d } = await reader.read();
+      done = d;
+      if (value){
+        const text = td.decode(value, {stream:true}); // we only count bytes for progress
+        loaded += text.length;
+        const now = performance.now();
+        if (now - lastTick > 500){
+          postMessage({
+            type:'progress',
+            loadedBytes: loaded,
+            totalBytes: file.size,
+            pct: Math.min(99, Math.floor(loaded * 100 / file.size))
+          });
+          lastTick = now;
+        }
+      }
+    }
+
+    postMessage({ type:'done', summary: {
+      totalChars:{user:0,assistant:0},
+      totalMsgs:{user:0,assistant:0},
+      earliestTs:null,
+      timeOfDay:new Array(8).fill(0),
+      dayActive:[],
+      monthDailyChars:{},
+      keywords:[],
+      samplingNote: file.size > 50*1024*1024,
+      mode
+    }});
+  }catch(err){
+    postMessage({ type:'error', message:String(err?.message||err) });
+  }
+}

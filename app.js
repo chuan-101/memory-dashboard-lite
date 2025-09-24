@@ -75,8 +75,112 @@ $('#runPrecheck').onclick = ()=>{
   worker.postMessage({type:'precheck', file:fileHandle});
 };
 worker.onmessage = (e)=>{
-  const {type, ok, reason, hint} = e.data || {};
+  const data = e.data || {};
+  const {type} = data;
   if(type==='precheck'){
+    const {ok, reason, hint} = data;
     $('#status').textContent = ok ? `预检通过：检测到 ChatGPT 导出结构${hint?`（${hint}）`:''}` : `预检失败：${reason || '未知原因'}`;
+    if (ok) {
+      const mode = localStorage.getItem('md_filter_mode') || 'simple';
+      worker.postMessage({ type:'parse', file:fileHandle, mode });
+      $('#status').textContent = 'Precheck passed, parsing…';
+    }
+  } else if(type==='progress'){
+    const {pct = 0, loadedBytes = 0, totalBytes = 0} = data;
+    const pctText = pct.toString().padStart(2, '0');
+    $('#status').textContent = `Parsing… ${pctText}% (${formatBytes(loadedBytes)} / ${formatBytes(totalBytes)})`;
+  } else if(type==='done'){
+    const {summary} = data;
+    applySummary(summary);
+    const sampling = summary?.samplingNote ? ' (sampling enabled)' : '';
+    $('#status').textContent = `Parsing complete.${sampling}`;
+  } else if(type==='error'){
+    $('#status').textContent = `解析失败：${data.message || '未知错误'}`;
   }
 };
+
+function formatBytes(bytes){
+  if(!Number.isFinite(bytes) || bytes <= 0) return '0 B';
+  const units = ['B','KB','MB','GB','TB'];
+  let idx = 0;
+  let value = bytes;
+  while(value >= 1024 && idx < units.length - 1){
+    value /= 1024;
+    idx++;
+  }
+  const fractionDigits = value >= 100 || idx === 0 ? 0 : (value >= 10 ? 1 : 2);
+  return `${value.toFixed(fractionDigits)} ${units[idx]}`;
+}
+
+function applySummary(summary){
+  if(!summary){ return; }
+  $('#uChars').textContent = summary.totalChars?.user ?? 0;
+  $('#aChars').textContent = summary.totalChars?.assistant ?? 0;
+  $('#uMsgs').textContent = summary.totalMsgs?.user ?? 0;
+  $('#aMsgs').textContent = summary.totalMsgs?.assistant ?? 0;
+
+  const ts = summary.earliestTs;
+  $('#earliest').textContent = ts ? new Date(ts).toLocaleString() : '—';
+
+  const bestSlot = summarizeHotSlot(summary.timeOfDay);
+  $('#hotSlot').textContent = bestSlot || '—';
+
+  const streaks = calcStreaks(summary.dayActive);
+  $('#streakNow').textContent = streaks.now;
+  $('#streakMax').textContent = streaks.max;
+
+  $('#kw').textContent = summary.keywords?.length ? summary.keywords.join('、') : '';
+  $('#monthGrid').textContent = Object.keys(summary.monthDailyChars || {}).length ? '[数据待渲染]' : '';
+  $('#monthHint').textContent = '将以纯文本呈现';
+}
+
+function summarizeHotSlot(timeOfDay){
+  if(!Array.isArray(timeOfDay) || !timeOfDay.length){ return ''; }
+  const slots = ['0-3','3-6','6-9','9-12','12-15','15-18','18-21','21-24'];
+  let bestIdx = 0;
+  let bestVal = -Infinity;
+  timeOfDay.forEach((val, idx)=>{
+    if((val ?? 0) > bestVal){
+      bestVal = val ?? 0;
+      bestIdx = idx;
+    }
+  });
+  if(bestVal <= 0){ return ''; }
+  return slots[bestIdx] || '';
+}
+
+function calcStreaks(dayActive){
+  if(!Array.isArray(dayActive) || !dayActive.length){
+    return {now: '—', max: '—'};
+  }
+  const sortedDays = [...dayActive].sort();
+  let nowStreak = 1;
+  let maxStreak = 1;
+  let currentStreak = 1;
+
+  for(let i=1;i<sortedDays.length;i++){
+    const prev = new Date(sortedDays[i-1]);
+    const curr = new Date(sortedDays[i]);
+    const diff = (curr - prev) / (1000*60*60*24);
+    if(Math.abs(diff - 1) < 0.01){
+      currentStreak += 1;
+    } else {
+      currentStreak = 1;
+    }
+    if(currentStreak > maxStreak){ maxStreak = currentStreak; }
+  }
+
+  // Determine current streak (ending today)
+  const today = new Date();
+  const last = new Date(sortedDays[sortedDays.length - 1]);
+  const dayDiff = Math.floor((today.setHours(0,0,0,0) - last.setHours(0,0,0,0)) / (1000*60*60*24));
+  if(dayDiff === 0){
+    nowStreak = currentStreak;
+  } else if(dayDiff === 1){
+    nowStreak = currentStreak;
+  } else {
+    nowStreak = '—';
+  }
+
+  return {now: nowStreak, max: maxStreak};
+}
