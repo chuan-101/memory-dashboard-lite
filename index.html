@@ -4,24 +4,47 @@
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Memory：Me&GPT</title>
 <style>
-/* —— 主题变量：仅使用调色盘中的 4 色 —— */
-body{font-family:system-ui,Segoe UI,Roboto;max-width:960px;margin:32px auto;padding:16px;line-height:1.6}
+/* —— 语义色与组件用色 —— */
+body{font-family:system-ui,Segoe UI,Roboto;max-width:960px;margin:32px auto;padding:16px;line-height:1.6;background:var(--bg);color:var(--text)}
 h1{margin:0 0 12px}
-.card{padding:12px;border:1px solid var(--c3);background:var(--c2);margin:10px 0;border-radius:12px}
+.card{padding:12px;border:1px solid var(--border);background:var(--surface);margin:10px 0;border-radius:12px}
 .row{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
 .row>label{display:flex;align-items:center;gap:6px}
-.badge{display:inline-block;padding:2px 8px;border-radius:999px;background:var(--c1);color:#fff;margin-left:6px}
-button{padding:6px 10px;border-radius:10px;border:1px solid var(--c3);background:var(--c2);cursor:pointer}
-button:hover{filter:brightness(0.97)}
+.badge{display:inline-block;padding:2px 8px;border-radius:999px;background:var(--accent);color:#fff;margin-left:6px}
+button{padding:6px 10px;border-radius:10px;border:1px solid var(--border);background:var(--surface);color:var(--text);cursor:pointer}
+button:hover{filter:brightness(0.98)}
 .theme{font-weight:600}
-.theme[aria-pressed="true"]{outline:2px solid var(--c1)}
-input[type="text"]{padding:6px 8px;border-radius:8px;border:1px solid var(--c3);background:var(--c2)}
-input[type="radio"]{accent-color:var(--c1)}
+.theme[aria-pressed="true"]{outline:2px solid var(--accent)}
+input[type="text"]{padding:6px 8px;border-radius:8px;border:1px solid var(--border);background:var(--surface);color:var(--text)}
+input[type="radio"]{accent-color:var(--accent)}
+small{opacity:.8}
+@media (max-width:640px){ body{margin:16px auto;padding:12px} }
 
 /* —— 主题映射：用 data-theme 切换 —— */
-body[data-theme="Echoes"]{ --c1:#b6aac6; --c2:#9f9bc2; --c3:#9ebec3; --c4:#d8e6e8; background:var(--c4); color:#111; }
-body[data-theme="Logic"] { --c1:#febcbf; --c2:#feddcc; --c3:#aac1b0; --c4:#c94b63; background:var(--c4); color:#fff; }
-body[data-theme="Emotion"]{ --c1:#f5f0bd; --c2:#dbdfab; --c3:#b3c893; --c4:#75a9ae; background:var(--c4); color:#102; }
+/* Echoes（#b6aac6、#9f9bc2、#9ebec3、#d8e6e8） */
+body[data-theme="Echoes"]{
+  --bg:#d8e6e8;      /* 最浅：底 */
+  --surface:#9f9bc2; /* 次浅：卡片 */
+  --border:#9ebec3;  /* 边框 */
+  --accent:#b6aac6;  /* 强调 */
+  --text:#111;       /* 文字 */
+}
+/* Logic（#febcbf、#feddcc、#aac1b0、#c94b63） */
+body[data-theme="Logic"]{
+  --bg:#feddcc;      /* 用最浅蜜桃做底，避免红底压字 */
+  --surface:#febcbf; /* 卡片略深 */
+  --border:#aac1b0;  /* 冷绿描边压住暖色 */
+  --accent:#c94b63;  /* 深红仅做强调 */
+  --text:#1a1a1a;    /* 深色文字，阅读性强 */
+}
+/* Emotion（#f5f0bd、#dbdfab、#b3c893、#75a9ae） */
+body[data-theme="Emotion"]{
+  --bg:#f5f0bd;
+  --surface:#dbdfab;
+  --border:#b3c893;
+  --accent:#75a9ae;
+  --text:#102010;
+}
 
 /* 小屏优化 */
 @media (max-width:640px){ body{margin:16px auto;padding:12px} }
