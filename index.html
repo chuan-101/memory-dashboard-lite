@@ -4,29 +4,47 @@
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Memory：Me&GPT</title>
 <style>
-:root{--c1:#b6aac6;--c2:#9f9bc2;--c3:#9ebec3;--c4:#d8e6e8;}
+/* —— 主题变量：仅使用调色盘中的 4 色 —— */
 body{font-family:system-ui,Segoe UI,Roboto;max-width:960px;margin:32px auto;padding:16px;line-height:1.6}
 h1{margin:0 0 12px}
-.card{padding:12px;border:1px solid var(--c3);background:var(--c4);margin:10px 0;border-radius:12px}
-.row{display:flex;gap:8px;flex-wrap:wrap}
+.card{padding:12px;border:1px solid var(--c3);background:var(--c2);margin:10px 0;border-radius:12px}
+.row{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
 .row>label{display:flex;align-items:center;gap:6px}
-.badge{display:inline-block;padding:2px 8px;border-radius:999px;background:var(--c2);color:#fff;margin-left:6px}
-small{opacity:.75}
+.badge{display:inline-block;padding:2px 8px;border-radius:999px;background:var(--c1);color:#fff;margin-left:6px}
+button{padding:6px 10px;border-radius:10px;border:1px solid var(--c3);background:var(--c2);cursor:pointer}
+button:hover{filter:brightness(0.97)}
+.theme{font-weight:600}
+.theme[aria-pressed="true"]{outline:2px solid var(--c1)}
+input[type="text"]{padding:6px 8px;border-radius:8px;border:1px solid var(--c3);background:var(--c2)}
+input[type="radio"]{accent-color:var(--c1)}
+
+/* —— 主题映射：用 data-theme 切换 —— */
+body[data-theme="Echoes"]{ --c1:#b6aac6; --c2:#9f9bc2; --c3:#9ebec3; --c4:#d8e6e8; background:var(--c4); color:#111; }
+body[data-theme="Logic"] { --c1:#febcbf; --c2:#feddcc; --c3:#aac1b0; --c4:#c94b63; background:var(--c4); color:#fff; }
+body[data-theme="Emotion"]{ --c1:#f5f0bd; --c2:#dbdfab; --c3:#b3c893; --c4:#75a9ae; background:var(--c4); color:#102; }
+
+/* 小屏优化 */
+@media (max-width:640px){ body{margin:16px auto;padding:12px} }
 </style>
-<body>
+<body data-theme="Echoes">
   <h1 id="title">Memory：Me&GPT</h1>
 
   <div class="card">
     <div class="row">
-      <label>我方显示名（user）<input id="userName" placeholder="Me"></label>
-      <label>对方显示名（assistant）<input id="assistantName" placeholder="GPT"></label>
+      <label>我方显示名（user）<input id="userName" placeholder="Me" type="text"></label>
+      <label>对方显示名（assistant）<input id="assistantName" placeholder="GPT" type="text"></label>
       <button id="saveNames">保存并应用</button>
       <button id="resetNames">重置</button>
+      <span class="badge" id="filterInfo">仅近三月统计</span>
     </div>
     <div class="row">
       <label><input type="radio" name="filter" value="simple" checked> 简单过滤</label>
       <label><input type="radio" name="filter" value="deep"> 深度过滤</label>
-      <span class="badge" id="filterInfo">仅近三月统计</span>
+      <span style="flex:1"></span>
+      <span>主题：</span>
+      <button class="theme" data-theme="Echoes" aria-pressed="true">Echoes</button>
+      <button class="theme" data-theme="Logic" aria-pressed="false">Logic</button>
+      <button class="theme" data-theme="Emotion" aria-pressed="false">Emotion</button>
     </div>
   </div>
 
