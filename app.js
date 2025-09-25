@@ -69,7 +69,6 @@ let fileHandle = null;
 $('#file').onchange = (e)=>{ fileHandle = e.target.files?.[0] || null; $('#status').textContent = fileHandle? `已选择：${fileHandle.name}`:'未加载文件'; };
 const worker = new Worker('./parser.worker.js?v=7', {type:'module'});
 let currentSummary = null;
-let lastSummary = null;
 
 $('#runPrecheck').onclick = ()=>{
   if(!fileHandle){ $('#status').textContent = '请先选择 JSON 文件'; return; }
@@ -94,7 +93,6 @@ worker.onmessage = (e)=>{
   } else if(type==='done'){
     const {summary = null} = data;
     currentSummary = summary;
-    lastSummary = summary;
     renderSummaryBasics(summary);
     const hotSlot = summarizeHotSlot(summary?.timeOfDay);
     $('#hotSlot').textContent = hotSlot || '—';
@@ -106,7 +104,7 @@ worker.onmessage = (e)=>{
       statusText += '（性能保护：基于抽样）';
     }
     $('#status').textContent = statusText;
-    renderMonthGrid(lastSummary);
+    renderMonthlyTiles(summary);
   } else if(type==='error'){
     $('#status').textContent = data.message || '未知错误';
   }
@@ -253,15 +251,13 @@ function formatRun(run){
   return `${start}–${end} · ${run.length}天`;
 }
 
-function renderMonthGrid(summary){
+function renderMonthlyTiles(summary){
   const container = $('#monthGrid');
   if(!container){ return; }
-  if(!summary){
-    container.innerHTML = '';
-    return;
-  }
 
   const monthDailyChars = summary?.monthDailyChars || {};
+  console.log('[monthly] tiles render', Object.keys(monthDailyChars).length);
+
   const weekdayLabels = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
   const now = new Date();
   const currentMonthStart = new Date(now.getFullYear(), now.getMonth(), 1);
@@ -270,7 +266,9 @@ function renderMonthGrid(summary){
     months.push(new Date(currentMonthStart.getFullYear(), currentMonthStart.getMonth() - i, 1));
   }
 
-  const sections = months.map(monthDate => {
+  const fragment = document.createDocumentFragment();
+
+  months.forEach(monthDate => {
     const year = monthDate.getFullYear();
     const monthIndex = monthDate.getMonth();
     const monthKey = `${year}-${String(monthIndex + 1).padStart(2, '0')}`;
@@ -278,10 +276,28 @@ function renderMonthGrid(summary){
     const totalDays = new Date(year, monthIndex + 1, 0).getDate();
     const offset = (firstDay.getDay() + 6) % 7;
 
-    const cells = [];
+    const monthSection = document.createElement('div');
+    monthSection.className = 'month';
+
+    const titleEl = document.createElement('div');
+    titleEl.className = 'month-title';
+    titleEl.textContent = monthKey;
+    monthSection.appendChild(titleEl);
+
+    const dowEl = document.createElement('div');
+    dowEl.className = 'dow';
+    dowEl.textContent = weekdayLabels.join(' ');
+    monthSection.appendChild(dowEl);
+
+    const monthGrid = document.createElement('div');
+    monthGrid.className = 'month-grid';
+
     for(let i = 0; i < offset; i += 1){
-      cells.push('');
+      const emptyCell = document.createElement('div');
+      emptyCell.className = 'day empty';
+      monthGrid.appendChild(emptyCell);
     }
+
     for(let day = 1; day <= totalDays; day += 1){
       const dayKey = `${monthKey}-${String(day).padStart(2, '0')}`;
       let safeCount = Number(monthDailyChars?.[dayKey]);
@@ -290,33 +306,36 @@ function renderMonthGrid(summary){
       }else{
         safeCount = Math.trunc(safeCount);
       }
-      const label = `${day}: ${safeCount}`;
-      cells.push(label);
-    }
-    while(cells.length % 7 !== 0){
-      cells.push('');
+
+      const dayEl = document.createElement('div');
+      dayEl.className = 'day';
+      if(safeCount <= 0){
+        dayEl.classList.add('zero');
+      }
+
+      const dayNumber = document.createElement('span');
+      dayNumber.className = 'd';
+      dayNumber.textContent = String(day).padStart(2, '0');
+      dayEl.appendChild(dayNumber);
+
+      const countEl = document.createElement('span');
+      countEl.className = 'cnt';
+      countEl.textContent = formatCount(safeCount);
+      dayEl.appendChild(countEl);
+
+      monthGrid.appendChild(dayEl);
     }
 
-    const headerRow = `<tr>${weekdayLabels.map(label => `<th>${label}</th>`).join('')}</tr>`;
-    const bodyRows = [];
-    for(let idx = 0; idx < cells.length; idx += 7){
-      const rowCells = cells
-        .slice(idx, idx + 7)
-        .map(cell => `<td>${cell || ''}</td>`)
-        .join('');
-      bodyRows.push(`<tr>${rowCells}</tr>`);
+    while(monthGrid.children.length % 7 !== 0){
+      const emptyCell = document.createElement('div');
+      emptyCell.className = 'day empty';
+      monthGrid.appendChild(emptyCell);
     }
 
-    return `
-      <section class="month-block">
-        <h3>${monthKey}</h3>
-        <table class="month-grid-table">
-          ${headerRow}
-          ${bodyRows.join('')}
-        </table>
-      </section>
-    `;
+    monthSection.appendChild(monthGrid);
+    fragment.appendChild(monthSection);
   });
 
-  container.innerHTML = sections.join('');
+  container.innerHTML = '';
+  container.appendChild(fragment);
 }
