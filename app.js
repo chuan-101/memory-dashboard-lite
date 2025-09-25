@@ -1,6 +1,16 @@
 const $ = (s)=>document.querySelector(s);
 const LS = {user:'md_user_name', asst:'md_asst_name', filter:'md_filter_mode', theme:'md_theme'};
 const defaults = {user:'Me', asst:'GPT', filter:'simple', theme:'Echoes'};
+let currentSummary = null;
+
+const nameUserEl = $('#nameU');
+const nameAssistantEl = $('#nameA');
+const overviewMetrics = {
+  user: buildOverviewMetric('#uChars'),
+  assistant: buildOverviewMetric('#aChars')
+};
+const timeMetrics = setupTimeElements();
+const streakMetrics = setupStreakElements();
 
 // —— 读取与应用偏好
 function loadPrefs(){
@@ -15,9 +25,13 @@ function sanitizeName(s){ return (s||'').trim().slice(0,24).replace(/[<>]/g,'');
 
 function applyNames(p){
   $('#title').textContent = `Memory：${p.user}&${p.asst}`;
-  $('#nameU').textContent = p.user; $('#nameA').textContent = p.asst;
+  if(nameUserEl){ nameUserEl.textContent = p.user; }
+  if(nameAssistantEl){ nameAssistantEl.textContent = p.asst; }
   $('#nameU2').textContent = p.user; $('#nameA2').textContent = p.asst;
   $('#userName').value = p.user; $('#assistantName').value = p.asst;
+  if(currentSummary){
+    renderSummaryBasics(currentSummary);
+  }
 }
 function applyFilter(mode){
   document.querySelectorAll('input[name="filter"]').forEach(r=>r.checked=(r.value===mode));
@@ -28,6 +42,46 @@ function applyTheme(theme){
   document.querySelectorAll('.theme').forEach(btn=>{
     btn.setAttribute('aria-pressed', btn.dataset.theme===theme ? 'true':'false');
   });
+}
+
+function buildOverviewMetric(selector){
+  const kpi = $(selector);
+  const metric = kpi ? kpi.closest('.metric') : null;
+  const detail = metric ? metric.querySelector('.sub') : null;
+  return {kpi, metric, detail};
+}
+
+function setupTimeElements(){
+  const earliest = $('#earliest');
+  const hotSlot = $('#hotSlot');
+  let detail = null;
+  if(hotSlot){
+    detail = document.createElement('div');
+    detail.className = 'sub mono muted';
+    hotSlot.insertAdjacentElement('afterend', detail);
+  }
+  return {earliest, hotSlot, detail};
+}
+
+function setupStreakElements(){
+  const nowKpi = $('#streakNow');
+  const maxKpi = $('#streakMax');
+  const nowMetric = nowKpi ? nowKpi.closest('.metric') : null;
+  const maxMetric = maxKpi ? maxKpi.closest('.metric') : null;
+  const nowDetail = createStreakDetail(nowKpi);
+  const maxDetail = createStreakDetail(maxKpi);
+  return {
+    now: {kpi: nowKpi, metric: nowMetric, detail: nowDetail},
+    max: {kpi: maxKpi, metric: maxMetric, detail: maxDetail}
+  };
+}
+
+function createStreakDetail(kpi){
+  if(!kpi){ return null; }
+  const detail = document.createElement('div');
+  detail.className = 'sub mono muted';
+  kpi.insertAdjacentElement('afterend', detail);
+  return detail;
 }
 
 // —— 初始化
@@ -68,7 +122,6 @@ document.querySelectorAll('.theme').forEach(btn=>{
 let fileHandle = null;
 $('#file').onchange = (e)=>{ fileHandle = e.target.files?.[0] || null; $('#status').textContent = fileHandle? `已选择：${fileHandle.name}`:'未加载文件'; };
 const worker = new Worker('./parser.worker.js?v=7', {type:'module'});
-let currentSummary = null;
 
 $('#runPrecheck').onclick = ()=>{
   if(!fileHandle){ $('#status').textContent = '请先选择 JSON 文件'; return; }
@@ -94,11 +147,6 @@ worker.onmessage = (e)=>{
     const {summary = null} = data;
     currentSummary = summary;
     renderSummaryBasics(summary);
-    const hotSlot = summarizeHotSlot(summary?.timeOfDay);
-    $('#hotSlot').textContent = hotSlot || '—';
-    const streaks = calcStreaks(summary?.dayActive);
-    $('#streakNow').textContent = streaks.now || '—';
-    $('#streakMax').textContent = streaks.max || '—';
     let statusText = '解析完成';
     if(summary?.samplingNote === true){
       statusText += '（性能保护：基于抽样）';
@@ -109,13 +157,6 @@ worker.onmessage = (e)=>{
     $('#status').textContent = data.message || '未知错误';
   }
 };
-
-const hourFormatter = new Intl.DateTimeFormat(undefined, {
-  year: 'numeric',
-  month: '2-digit',
-  day: '2-digit',
-  hour: '2-digit'
-});
 
 function clampPct(pct){
   if(!Number.isFinite(pct)){ return '0'; }
@@ -134,39 +175,154 @@ function formatCount(value){
 }
 
 function renderSummaryBasics(summary){
-  if(!summary){
-    $('#uChars').textContent = '0';
-    $('#aChars').textContent = '0';
-    $('#uMsgs').textContent = '0';
-    $('#aMsgs').textContent = '0';
-    $('#earliest').textContent = '—';
+  renderOverviewMetrics(summary);
+  renderTimeMetrics(summary);
+  renderStreakMetrics(summary);
+}
+
+function renderOverviewMetrics(summary){
+  const userData = summary ? {
+    name: getDisplayName(nameUserEl, defaults.user),
+    chars: Number(summary?.totalChars?.user ?? 0),
+    msgs: Number(summary?.totalMsgs?.user ?? 0)
+  } : null;
+  const assistantData = summary ? {
+    name: getDisplayName(nameAssistantEl, defaults.asst),
+    chars: Number(summary?.totalChars?.assistant ?? 0),
+    msgs: Number(summary?.totalMsgs?.assistant ?? 0)
+  } : null;
+  updateOverviewMetric(overviewMetrics.user, userData);
+  updateOverviewMetric(overviewMetrics.assistant, assistantData);
+}
+
+function updateOverviewMetric(target, data){
+  if(!target?.kpi){ return; }
+  if(!data){
+    target.kpi.textContent = '—';
+    if(target.detail){ target.detail.textContent = ''; }
     return;
   }
-
-  const userChars = Number(summary?.totalChars?.user ?? 0);
-  const asstChars = Number(summary?.totalChars?.assistant ?? 0);
-  const userMsgs = Number(summary?.totalMsgs?.user ?? 0);
-  const asstMsgs = Number(summary?.totalMsgs?.assistant ?? 0);
-  $('#uChars').textContent = formatCount(userChars);
-  $('#aChars').textContent = formatCount(asstChars);
-  $('#uMsgs').textContent = formatCount(userMsgs);
-  $('#aMsgs').textContent = formatCount(asstMsgs);
-
-  const ts = summary?.earliestTs;
-  if(ts){
-    const dt = new Date(ts);
-    dt.setMinutes(0, 0, 0);
-    $('#earliest').textContent = hourFormatter.format(dt);
-  } else {
-    $('#earliest').textContent = '—';
+  const charText = formatCount(data.chars);
+  const msgText = formatCount(data.msgs);
+  target.kpi.textContent = `${data.name}：${charText} 字 · ${msgText} 条`;
+  if(target.detail){
+    target.detail.textContent = '';
   }
 }
 
+function renderTimeMetrics(summary){
+  const earliestInfo = summary ? formatEarliestLines(summary?.earliestTs) : null;
+  updateEarliest(earliestInfo);
+  const hotSlotInfo = summary ? summarizeHotSlot(summary?.timeOfDay) : null;
+  updateHotSlot(hotSlotInfo);
+}
+
+function updateEarliest(info){
+  const target = timeMetrics.earliest;
+  if(!target){ return; }
+  if(!info){
+    target.textContent = '—';
+    return;
+  }
+  const {dateLine, timeLine} = info;
+  if(dateLine && timeLine){
+    target.innerHTML = `${dateLine}<br>${timeLine}`;
+  }else if(dateLine){
+    target.textContent = dateLine;
+  }else{
+    target.textContent = '—';
+  }
+}
+
+function updateHotSlot(info){
+  const target = timeMetrics.hotSlot;
+  if(!target){ return; }
+  if(!info){
+    target.textContent = '—';
+    if(timeMetrics.detail){ timeMetrics.detail.textContent = ''; }
+    return;
+  }
+  target.textContent = info.start;
+  if(timeMetrics.detail){
+    const parts = [];
+    if(info.range){ parts.push(info.range); }
+    if(Number.isFinite(info.count) && info.count > 0){
+      parts.push(`${formatCount(info.count)} 条`);
+    }
+    timeMetrics.detail.textContent = parts.length ? `– ${parts.join(' · ')}` : '';
+  }
+}
+
+function renderStreakMetrics(summary){
+  const streaks = summary ? calcStreaks(summary?.dayActive) : {now:null, max:null};
+  const nowRun = streaks?.now || null;
+  const maxRun = streaks?.max || null;
+  const same = streakRunsEqual(nowRun, maxRun);
+  updateStreakMetric(streakMetrics.now, nowRun);
+  if(streakMetrics.max?.metric){
+    streakMetrics.max.metric.style.display = same ? 'none' : '';
+  }
+  if(same){
+    updateStreakMetric(streakMetrics.max, null);
+  }else{
+    updateStreakMetric(streakMetrics.max, maxRun);
+  }
+}
+
+function updateStreakMetric(target, data){
+  if(!target?.kpi){ return; }
+  if(!data){
+    target.kpi.textContent = '—';
+    if(target.detail){ target.detail.textContent = ''; }
+    return;
+  }
+  target.kpi.textContent = `${formatCount(data.length)} 天`;
+  if(target.detail){
+    const start = formatLocalDate(data.start);
+    const end = formatLocalDate(data.end);
+    target.detail.textContent = start && end ? `${start} → ${end}` : '';
+  }
+}
+
+function streakRunsEqual(a, b){
+  if(!a || !b){ return false; }
+  return a.length === b.length && a.start === b.start && a.end === b.end;
+}
+
+function getDisplayName(el, fallback){
+  if(!el){ return fallback; }
+  const text = (el.textContent || '').trim();
+  return text || fallback;
+}
+
+function formatEarliestLines(ts){
+  if(ts === undefined || ts === null){ return null; }
+  const dt = new Date(ts);
+  if(Number.isNaN(dt.getTime())){ return null; }
+  const dateLine = `${dt.getFullYear()}-${String(dt.getMonth() + 1).padStart(2, '0')}-${String(dt.getDate()).padStart(2, '0')}`;
+  const normalized = new Date(dt.getTime());
+  normalized.setMinutes(0, 0, 0);
+  const timeLine = `${String(normalized.getHours()).padStart(2, '0')}:${String(normalized.getMinutes()).padStart(2, '0')}`;
+  return {dateLine, timeLine};
+}
+
+function formatLocalDate(dateStr){
+  if(!dateStr){ return ''; }
+  const parts = dateStr.split('-').map(part => Number(part));
+  if(parts.length !== 3 || parts.some(part => !Number.isFinite(part))){
+    return dateStr.replaceAll('/', '-');
+  }
+  const [year, month, day] = parts;
+  const dt = new Date(year, month - 1, day);
+  if(Number.isNaN(dt.getTime())){ return dateStr; }
+  return `${dt.getFullYear()}-${String(dt.getMonth() + 1).padStart(2, '0')}-${String(dt.getDate()).padStart(2, '0')}`;
+}
+
 function summarizeHotSlot(timeOfDay){
-  if(!Array.isArray(timeOfDay) || timeOfDay.length !== 8){ return ''; }
+  if(!Array.isArray(timeOfDay) || timeOfDay.length !== 8){ return null; }
   const values = timeOfDay.map(v => Number(v) || 0);
   const maxVal = Math.max(...values);
-  if(maxVal <= 0){ return ''; }
+  if(maxVal <= 0){ return null; }
   const tzOffsetMinutes = -new Date().getTimezoneOffset();
   const slots = values
     .map((val, idx) => ({ val, idx }))
@@ -174,9 +330,21 @@ function summarizeHotSlot(timeOfDay){
     .map(item => {
       const utcStartMin = item.idx * 180;
       const localStartMin = (utcStartMin + tzOffsetMinutes + 1440) % 1440;
-      return formatSlotRange(localStartMin);
-    });
-  return slots.join('、');
+      return {
+        start: formatHourMinute(localStartMin),
+        range: formatSlotRange(localStartMin),
+        count: Math.round(maxVal)
+      };
+    })
+    .sort((a, b) => a.start.localeCompare(b.start));
+  if(!slots.length){ return null; }
+  const primary = slots[0];
+  const rangeLabel = slots.length > 1 ? slots.map(slot => slot.range).join('、') : primary.range;
+  return {
+    start: primary.start,
+    range: rangeLabel,
+    count: Math.round(maxVal)
+  };
 }
 
 function formatSlotRange(startMinutes){
@@ -201,11 +369,11 @@ function formatHourMinute(totalMinutes){
 
 function calcStreaks(dayActive){
   if(!Array.isArray(dayActive) || !dayActive.length){
-    return {now: '', max: ''};
+    return {now: null, max: null};
   }
   const uniqueSorted = Array.from(new Set(dayActive)).sort();
   if(!uniqueSorted.length){
-    return {now: '', max: ''};
+    return {now: null, max: null};
   }
 
   const runs = [];
@@ -239,16 +407,18 @@ function calcStreaks(dayActive){
   const currentRun = runs[runs.length - 1];
 
   return {
-    now: formatRun(currentRun),
-    max: formatRun(maxRun)
+    now: normalizeRun(currentRun),
+    max: normalizeRun(maxRun)
   };
 }
 
-function formatRun(run){
-  if(!run){ return ''; }
-  const start = run.start.replaceAll('-', '/');
-  const end = run.end.replaceAll('-', '/');
-  return `${start}–${end} · ${run.length}天`;
+function normalizeRun(run){
+  if(!run){ return null; }
+  return {
+    start: run.start,
+    end: run.end,
+    length: run.length
+  };
 }
 
 function renderMonthlyTiles(summary){
