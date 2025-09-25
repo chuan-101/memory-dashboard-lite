@@ -67,7 +67,8 @@ document.querySelectorAll('.theme').forEach(btn=>{
 // —— 文件与预检（保持原有逻辑）
 let fileHandle = null;
 $('#file').onchange = (e)=>{ fileHandle = e.target.files?.[0] || null; $('#status').textContent = fileHandle? `已选择：${fileHandle.name}`:'未加载文件'; };
-const worker = new Worker('./parser.worker.js', {type:'module'});
+const worker = new Worker('./parser.worker.js?v=3', {type:'module'});
+let currentSummary = null;
 
 $('#runPrecheck').onclick = ()=>{
   if(!fileHandle){ $('#status').textContent = '请先选择 JSON 文件'; return; }
@@ -87,51 +88,72 @@ worker.onmessage = (e)=>{
     }
   } else if(type==='progress'){
     const {pct = 0, loadedBytes = 0, totalBytes = 0} = data;
-    const pctText = pct.toString().padStart(2, '0');
-    $('#status').textContent = `Parsing… ${pctText}% (${formatBytes(loadedBytes)} / ${formatBytes(totalBytes)})`;
+    const pctText = clampPct(pct);
+    $('#status').textContent = `${pctText}% (${formatMB(loadedBytes)}/${formatMB(totalBytes)} MB)`;
   } else if(type==='done'){
-    const {summary} = data;
-    applySummary(summary);
-    const sampling = summary?.samplingNote ? ' (sampling enabled)' : '';
-    $('#status').textContent = `Parsing complete.${sampling}`;
+    const {summary = null} = data;
+    currentSummary = summary;
+    renderSummaryBasics(summary);
+    let statusText = '解析完成';
+    if(summary?.samplingNote === true){
+      statusText += '（性能保护：基于抽样）';
+    }
+    $('#status').textContent = statusText;
   } else if(type==='error'){
-    $('#status').textContent = `解析失败：${data.message || '未知错误'}`;
+    $('#status').textContent = data.message || '未知错误';
   }
 };
 
-function formatBytes(bytes){
-  if(!Number.isFinite(bytes) || bytes <= 0) return '0 B';
-  const units = ['B','KB','MB','GB','TB'];
-  let idx = 0;
-  let value = bytes;
-  while(value >= 1024 && idx < units.length - 1){
-    value /= 1024;
-    idx++;
-  }
-  const fractionDigits = value >= 100 || idx === 0 ? 0 : (value >= 10 ? 1 : 2);
-  return `${value.toFixed(fractionDigits)} ${units[idx]}`;
+const hourFormatter = new Intl.DateTimeFormat(undefined, {
+  year: 'numeric',
+  month: '2-digit',
+  day: '2-digit',
+  hour: '2-digit'
+});
+
+function clampPct(pct){
+  if(!Number.isFinite(pct)){ return '0'; }
+  const safe = Math.max(0, Math.min(100, pct));
+  return Math.round(safe).toString();
 }
 
-function applySummary(summary){
-  if(!summary){ return; }
-  $('#uChars').textContent = summary.totalChars?.user ?? 0;
-  $('#aChars').textContent = summary.totalChars?.assistant ?? 0;
-  $('#uMsgs').textContent = summary.totalMsgs?.user ?? 0;
-  $('#aMsgs').textContent = summary.totalMsgs?.assistant ?? 0;
+function formatMB(bytes){
+  if(!Number.isFinite(bytes) || bytes <= 0){ return '0.00'; }
+  return (bytes / (1024 * 1024)).toFixed(2);
+}
 
-  const ts = summary.earliestTs;
-  $('#earliest').textContent = ts ? new Date(ts).toLocaleString() : '—';
+function formatCount(value){
+  if(!Number.isFinite(value)){ return '0'; }
+  return Math.trunc(value).toLocaleString();
+}
 
-  const bestSlot = summarizeHotSlot(summary.timeOfDay);
-  $('#hotSlot').textContent = bestSlot || '—';
+function renderSummaryBasics(summary){
+  if(!summary){
+    $('#uChars').textContent = '0';
+    $('#aChars').textContent = '0';
+    $('#uMsgs').textContent = '0';
+    $('#aMsgs').textContent = '0';
+    $('#earliest').textContent = '—';
+    return;
+  }
 
-  const streaks = calcStreaks(summary.dayActive);
-  $('#streakNow').textContent = streaks.now;
-  $('#streakMax').textContent = streaks.max;
+  const userChars = Number(summary?.totalChars?.user ?? 0);
+  const asstChars = Number(summary?.totalChars?.assistant ?? 0);
+  const userMsgs = Number(summary?.totalMsgs?.user ?? 0);
+  const asstMsgs = Number(summary?.totalMsgs?.assistant ?? 0);
+  $('#uChars').textContent = formatCount(userChars);
+  $('#aChars').textContent = formatCount(asstChars);
+  $('#uMsgs').textContent = formatCount(userMsgs);
+  $('#aMsgs').textContent = formatCount(asstMsgs);
 
-  $('#kw').textContent = summary.keywords?.length ? summary.keywords.join('、') : '';
-  $('#monthGrid').textContent = Object.keys(summary.monthDailyChars || {}).length ? '[数据待渲染]' : '';
-  $('#monthHint').textContent = '将以纯文本呈现';
+  const ts = summary?.earliestTs;
+  if(ts){
+    const dt = new Date(ts);
+    dt.setMinutes(0, 0, 0);
+    $('#earliest').textContent = hourFormatter.format(dt);
+  } else {
+    $('#earliest').textContent = '—';
+  }
 }
 
 function summarizeHotSlot(timeOfDay){
