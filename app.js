@@ -237,14 +237,13 @@ function updateHotSlot(info){
     if(timeMetrics.detail){ timeMetrics.detail.textContent = ''; }
     return;
   }
-  target.textContent = info.start;
+  target.textContent = info.range || info.start || '—';
   if(timeMetrics.detail){
-    const parts = [];
-    if(info.range){ parts.push(info.range); }
     if(Number.isFinite(info.count) && info.count > 0){
-      parts.push(`${formatCount(info.count)} 条`);
+      timeMetrics.detail.textContent = `· ${formatCount(info.count)} 条`;
+    }else{
+      timeMetrics.detail.textContent = '';
     }
-    timeMetrics.detail.textContent = parts.length ? `– ${parts.join(' · ')}` : '';
   }
 }
 
