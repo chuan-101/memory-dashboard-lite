@@ -166,18 +166,16 @@ function summarizeHotSlot(timeOfDay){
   const values = timeOfDay.map(v => Number(v) || 0);
   const maxVal = Math.max(...values);
   if(maxVal <= 0){ return ''; }
-  const tzOffsetHours = -new Date().getTimezoneOffset() / 60;
-  const tzOffsetMinutes = Math.round(tzOffsetHours * 60);
+  const tzOffsetMinutes = -new Date().getTimezoneOffset();
   const slots = values
     .map((val, idx) => ({ val, idx }))
     .filter(item => item.val === maxVal)
-    .map(item => formatSlotFromBin(item.idx, tzOffsetMinutes));
-  return slots.join(', ');
-}
-
-function formatSlotFromBin(binIndex, tzOffsetMinutes){
-  const localStartMinutes = (binIndex * 180 + tzOffsetMinutes + 1440) % 1440;
-  return formatSlotRange(localStartMinutes);
+    .map(item => {
+      const utcStartMin = item.idx * 180;
+      const localStartMin = (utcStartMin + tzOffsetMinutes + 1440) % 1440;
+      return formatSlotRange(localStartMin);
+    });
+  return slots.join('、');
 }
 
 function formatSlotRange(startMinutes){
