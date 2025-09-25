@@ -106,7 +106,7 @@ worker.onmessage = (e)=>{
       statusText += '（性能保护：基于抽样）';
     }
     $('#status').textContent = statusText;
-    renderMonthlyTiles(summary);
+    renderMonthGrid(lastSummary);
   } else if(type==='error'){
     $('#status').textContent = data.message || '未知错误';
   }
@@ -253,7 +253,7 @@ function formatRun(run){
   return `${start}–${end} · ${run.length}天`;
 }
 
-function renderMonthlyTiles(summary){
+function renderMonthGrid(summary){
   const container = $('#monthGrid');
   if(!container){ return; }
   if(!summary){
@@ -262,7 +262,7 @@ function renderMonthlyTiles(summary){
   }
 
   const monthDailyChars = summary?.monthDailyChars || {};
-  console.log('[monthly] tiles render', Object.keys(monthDailyChars).length);
+  const weekdayLabels = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
   const now = new Date();
   const currentMonthStart = new Date(now.getFullYear(), now.getMonth(), 1);
   const months = [];
@@ -270,8 +270,7 @@ function renderMonthlyTiles(summary){
     months.push(new Date(currentMonthStart.getFullYear(), currentMonthStart.getMonth() - i, 1));
   }
 
-  const parts = [];
-  months.forEach((monthDate) => {
+  const sections = months.map(monthDate => {
     const year = monthDate.getFullYear();
     const monthIndex = monthDate.getMonth();
     const monthKey = `${year}-${String(monthIndex + 1).padStart(2, '0')}`;
@@ -279,42 +278,45 @@ function renderMonthlyTiles(summary){
     const totalDays = new Date(year, monthIndex + 1, 0).getDate();
     const offset = (firstDay.getDay() + 6) % 7;
 
-    parts.push('<div class="month">');
-    parts.push(`<div class="month-title">${monthKey}</div>`);
-    parts.push('<div class="dow">Mon Tue Wed Thu Fri Sat Sun</div>');
-    parts.push('<div class="month-grid">');
-
+    const cells = [];
     for(let i = 0; i < offset; i += 1){
-      parts.push('<div class="day empty"></div>');
+      cells.push('');
     }
-
     for(let day = 1; day <= totalDays; day += 1){
-      const paddedDay = String(day).padStart(2, '0');
-      const dayKey = `${monthKey}-${paddedDay}`;
+      const dayKey = `${monthKey}-${String(day).padStart(2, '0')}`;
       let safeCount = Number(monthDailyChars?.[dayKey]);
       if(!Number.isFinite(safeCount)){
         safeCount = 0;
       }else{
         safeCount = Math.trunc(safeCount);
       }
-
-      const countLabel = formatCount(safeCount);
-      if(safeCount <= 0){
-        parts.push(`<div class="day zero"><span class="d mono">${paddedDay}</span><span class="cnt mono">${countLabel}</span></div>`);
-      }else{
-        parts.push(`<div class="day"><span class="d mono">${paddedDay}</span><span class="cnt mono">${countLabel}</span></div>`);
-      }
+      const label = `${day}: ${safeCount}`;
+      cells.push(label);
+    }
+    while(cells.length % 7 !== 0){
+      cells.push('');
     }
 
-    const totalCells = offset + totalDays;
-    const trailing = (7 - (totalCells % 7)) % 7;
-    for(let i = 0; i < trailing; i += 1){
-      parts.push('<div class="day empty"></div>');
+    const headerRow = `<tr>${weekdayLabels.map(label => `<th>${label}</th>`).join('')}</tr>`;
+    const bodyRows = [];
+    for(let idx = 0; idx < cells.length; idx += 7){
+      const rowCells = cells
+        .slice(idx, idx + 7)
+        .map(cell => `<td>${cell || ''}</td>`)
+        .join('');
+      bodyRows.push(`<tr>${rowCells}</tr>`);
     }
 
-    parts.push('</div>');
-    parts.push('</div>');
+    return `
+      <section class="month-block">
+        <h3>${monthKey}</h3>
+        <table class="month-grid-table">
+          ${headerRow}
+          ${bodyRows.join('')}
+        </table>
+      </section>
+    `;
   });
 
-  container.innerHTML = parts.join('');
+  container.innerHTML = sections.join('');
 }

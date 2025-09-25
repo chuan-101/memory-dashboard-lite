@@ -37,48 +37,67 @@ button.ghost{ background:var(--surface); color:var(--text) }
 .theme[aria-pressed="true"]{ outline:2px solid var(--accent) }
 .badge{ display:inline-block; padding:2px 8px; border-radius:999px; background:var(--accent); color:var(--accent-contrast); font-weight:700 }
 
-#monthGrid{ margin-top:12px; }
-#monthGrid .month{ margin:12px 0 16px; }
-#monthGrid .month:first-child{ margin-top:0; }
-#monthGrid .month-title{
-  font-weight:800;
-  margin:4px 0 8px;
-}
-#monthGrid .month-grid{
+#monthGrid{
   display:grid;
   grid-template-columns:repeat(7,1fr);
-  gap:8px;
+  gap:6px;
+  margin-top:12px;
 }
-#monthGrid .dow{
+#monthGrid .month-title{
+  grid-column:span 7;
   font-weight:700;
-  margin-bottom:6px;
-  opacity:.8;
+  font-size:16px;
+  margin:12px 0 0;
+}
+#monthGrid .month-title:first-child{ margin-top:0 }
+#monthGrid .dow{
+  font-weight:650;
+  text-align:center;
+  padding:6px 0 2px;
+  margin-top:6px;
 }
 #monthGrid .day{
-  background:var(--surface);
+  min-height:38px;
+  padding:6px 8px;
   border-radius:var(--radius);
-  padding:8px 6px;
-  min-height:58px;
+  background:var(--surface);
   display:flex;
   flex-direction:column;
-  justify-content:space-between;
-  align-items:flex-start;
+  gap:6px;
+  justify-content:flex-start;
   font-variant-numeric:tabular-nums;
+  position:relative;
 }
-#monthGrid .day .d{
-  font-weight:700;
-  opacity:.9;
+#monthGrid .day .date{
+  font-weight:600;
 }
-#monthGrid .day .cnt{
+#monthGrid .day .count,
+#monthGrid .day .pill{
+  margin-top:auto;
+  align-self:flex-end;
+}
+#monthGrid .day .count{
   font-size:12px;
-  opacity:.9;
+  opacity:.7;
 }
-#monthGrid .day.zero{ opacity:.45; }
-#monthGrid .day.empty{ visibility:hidden; }
+#monthGrid .day .count::before{ content:'· ' }
+#monthGrid .day .pill{
+  display:inline-flex;
+  align-items:center;
+  justify-content:center;
+  padding:2px 8px;
+  border-radius:999px;
+  background:var(--accent);
+  color:var(--accent-contrast);
+  font-weight:700;
+  font-size:12px;
+}
+#monthGrid .day.muted{ opacity:.5 }
+#monthGrid .day.empty{ visibility:hidden }
 
 @media (max-width:640px){
-  #monthGrid .month-grid{ gap:6px; }
-  #monthGrid .day{ min-height:54px; padding:6px; }
+  #monthGrid{ gap:4px }
+  #monthGrid .day{ min-height:36px; padding:5px 6px }
 }
 
 /* —— 主题（语义色：bg 最浅 / card 次浅 / surface 控件底 / accent 强调） —— */
