@@ -15,8 +15,38 @@ body{
 }
 h1{ font-size:28px; font-weight:800; letter-spacing:.2px; margin:0 0 16px }
 .h2{ font-size:18px; font-weight:700; margin:0 0 8px }
-.mono{ font-variant-numeric:tabular-nums }
+.mono{ font-variant-numeric:tabular-nums; font-feature-settings:"tnum" 1, "lnum" 1 }
 .muted{ opacity:.76 }
+.kpi{ font-size:clamp(28px,4vw,32px); font-weight:800; line-height:1.1 }
+.label{ font-size:12px; font-weight:700; letter-spacing:.14em; text-transform:uppercase; opacity:.8 }
+.sub{ font-size:13px; opacity:.7; margin-top:8px }
+.sep{ height:1px; background:currentColor; opacity:.12; margin:8px 0 }
+.hero-grid{
+  display:grid; gap:16px;
+  grid-template-columns:repeat(12,minmax(0,1fr));
+  margin:16px 0 24px;
+}
+.hero{
+  background:var(--card);
+  border-radius:28px;
+  padding:24px;
+  color:var(--text);
+  display:flex;
+  flex-direction:column;
+  gap:12px;
+}
+.hero .label{ margin-bottom:4px }
+.hero .metric-group{ display:grid; gap:16px; grid-template-columns:repeat(auto-fit,minmax(180px,1fr)); margin-top:4px }
+.hero .metric{ display:flex; flex-direction:column; gap:4px }
+.hero .metric .kpi{ margin-top:4px }
+.hero .sub{ margin-top:0 }
+.hero-time #earliest{ display:block; max-width:14ch; word-break:break-word }
+.hero-streak-grid{ display:grid; gap:16px; grid-template-columns:repeat(auto-fit,minmax(120px,1fr)); }
+.hero-grid .hero{ grid-column:span 12 }
+.hero-time .sep{ margin:12px 0 }
+.hero-time .kpi:last-of-type{ font-size:clamp(22px,3vw,26px) }
+.hero-streak-grid .kpi{ font-size:clamp(24px,4vw,30px) }
+.hero-streak .sub{ margin-top:12px }
 .card{
   background:var(--card); border:none; border-radius:var(--radius);
   padding:16px; margin:12px 0;
@@ -30,6 +60,8 @@ h1{ font-size:28px; font-weight:800; letter-spacing:.2px; margin:0 0 16px }
 .col-4{grid-column:span 4}
 .col-8{grid-column:span 8}
 @media (max-width:860px){ .col-6,.col-4,.col-8{grid-column:span 12} }
+.hero-grid .hero-time,.hero-grid .hero-streak{ grid-column:span 6 }
+@media (max-width:860px){ .hero-grid .hero-time,.hero-grid .hero-streak{ grid-column:span 12 } }
 
 .row{ display:flex; gap:10px; flex-wrap:wrap; align-items:center }
 .input{ padding:8px 10px; border:none; border-radius:12px; background:var(--surface); color:var(--text) }
@@ -107,32 +139,50 @@ body[data-theme="Emotion"]{
     </div>
   </div>
 
-  <!-- 指标分卡片布局 -->
-  <div class="grid">
-    <!-- 概览：总字数/总条数（双向） -->
-    <div class="card col-12">
-      <div class="h2">概览 Overview</div>
-      <div class="row">
-        <div><strong id="nameU">Me</strong>：<span id="uChars" class="mono">0</span> 字・<span id="uMsgs" class="mono">0</span> 条</div>
-        <div><strong id="nameA">GPT</strong>：<span id="aChars" class="mono">0</span> 字・<span id="aMsgs" class="mono">0</span> 条</div>
+  <div class="hero-grid">
+    <div class="hero hero-overview">
+      <div class="label">概览 Overview</div>
+      <div class="metric-group">
+        <div class="metric">
+          <div class="label muted"><span id="nameU">Me</span></div>
+          <div class="kpi mono" id="uChars">0</div>
+          <div class="sub mono">字数・<span id="uMsgs">0</span> 条</div>
+        </div>
+        <div class="metric">
+          <div class="label muted"><span id="nameA">GPT</span></div>
+          <div class="kpi mono" id="aChars">0</div>
+          <div class="sub mono">字数・<span id="aMsgs">0</span> 条</div>
+        </div>
       </div>
     </div>
 
-    <!-- 时间信息：最早时间 + 最常时段 -->
-    <div class="card col-6">
-      <div class="h2">时间 Time</div>
-      <div>最早对话创建时间：<strong id="earliest">—</strong> <span class="muted">（本地时区，精确到小时）</span></div>
-      <div style="margin-top:6px">最常聊天时段：<strong id="hotSlot">—</strong></div>
+    <div class="hero hero-time">
+      <div class="label">时间 Time</div>
+      <div class="kpi mono"><span id="earliest">—</span></div>
+      <div class="sub">本地时区，精确到小时</div>
+      <div class="sep"></div>
+      <div class="label muted">最常聊天时段</div>
+      <div class="kpi mono" id="hotSlot">—</div>
     </div>
 
-    <!-- 连续天数 -->
-    <div class="card col-6">
-      <div class="h2">连续天数 Streak</div>
-      <div>当前：<strong id="streakNow">—</strong></div>
-      <div>最长：<strong id="streakMax">—</strong></div>
-      <div class="muted" style="margin-top:6px">活跃日＝当天 <span id="nameU2">Me</span>/<span id="nameA2">GPT</span> 任一有消息</div>
+    <div class="hero hero-streak">
+      <div class="label">连续天数 Streak</div>
+      <div class="hero-streak-grid">
+        <div class="metric">
+          <div class="label muted">当前</div>
+          <div class="kpi mono" id="streakNow">—</div>
+        </div>
+        <div class="metric">
+          <div class="label muted">最长</div>
+          <div class="kpi mono" id="streakMax">—</div>
+        </div>
+      </div>
+      <div class="sub">活跃日＝当天 <span id="nameU2">Me</span>/<span id="nameA2">GPT</span> 任一有消息</div>
     </div>
+  </div>
 
+  <!-- 指标分卡片布局 -->
+  <div class="grid">
     <!-- 近三月月历字数（纯文本） -->
     <div class="card col-12">
       <div class="h2">最近三月字数分布 Monthly</div>
