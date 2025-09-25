@@ -69,6 +69,7 @@ let fileHandle = null;
 $('#file').onchange = (e)=>{ fileHandle = e.target.files?.[0] || null; $('#status').textContent = fileHandle? `已选择：${fileHandle.name}`:'未加载文件'; };
 const worker = new Worker('./parser.worker.js?v=7', {type:'module'});
 let currentSummary = null;
+let lastSummary = null;
 
 $('#runPrecheck').onclick = ()=>{
   if(!fileHandle){ $('#status').textContent = '请先选择 JSON 文件'; return; }
@@ -93,6 +94,7 @@ worker.onmessage = (e)=>{
   } else if(type==='done'){
     const {summary = null} = data;
     currentSummary = summary;
+    lastSummary = summary;
     renderSummaryBasics(summary);
     const hotSlot = summarizeHotSlot(summary?.timeOfDay);
     $('#hotSlot').textContent = hotSlot || '—';
@@ -104,6 +106,7 @@ worker.onmessage = (e)=>{
       statusText += '（性能保护：基于抽样）';
     }
     $('#status').textContent = statusText;
+    renderMonthGrid(lastSummary);
   } else if(type==='error'){
     $('#status').textContent = data.message || '未知错误';
   }
@@ -248,4 +251,69 @@ function formatRun(run){
   const start = run.start.replaceAll('-', '/');
   const end = run.end.replaceAll('-', '/');
   return `${start}–${end} · ${run.length}天`;
+}
+
+function renderMonthGrid(summary){
+  const container = $('#monthGrid');
+  if(!container){ return; }
+  if(!summary){
+    container.innerHTML = '';
+    return;
+  }
+
+  const monthDailyChars = summary?.monthDailyChars || {};
+  const now = new Date();
+  const currentMonthStart = new Date(now.getFullYear(), now.getMonth(), 1);
+  const months = [];
+  for(let i = 0; i < 3; i += 1){
+    months.push(new Date(currentMonthStart.getFullYear(), currentMonthStart.getMonth() - i, 1));
+  }
+
+  const parts = [];
+  months.forEach((monthDate) => {
+    const year = monthDate.getFullYear();
+    const monthIndex = monthDate.getMonth();
+    const monthKey = `${year}-${String(monthIndex + 1).padStart(2, '0')}`;
+    const firstDay = new Date(year, monthIndex, 1);
+    const totalDays = new Date(year, monthIndex + 1, 0).getDate();
+    const offset = (firstDay.getDay() + 6) % 7;
+
+    parts.push('<div class="month">');
+    parts.push(`<div class="month-title">${monthKey}</div>`);
+    parts.push('<div class="dow">Mon Tue Wed Thu Fri Sat Sun</div>');
+    parts.push('<div class="month-grid">');
+
+    for(let i = 0; i < offset; i += 1){
+      parts.push('<div class="day empty"></div>');
+    }
+
+    for(let day = 1; day <= totalDays; day += 1){
+      const paddedDay = String(day).padStart(2, '0');
+      const dayKey = `${monthKey}-${paddedDay}`;
+      let safeCount = Number(monthDailyChars?.[dayKey]);
+      if(!Number.isFinite(safeCount)){
+        safeCount = 0;
+      }else{
+        safeCount = Math.trunc(safeCount);
+      }
+
+      const countLabel = formatCount(safeCount);
+      if(safeCount <= 0){
+        parts.push(`<div class="day zero"><span class="d mono">${paddedDay}</span><span class="cnt mono">${countLabel}</span></div>`);
+      }else{
+        parts.push(`<div class="day"><span class="d mono">${paddedDay}</span><span class="cnt mono">${countLabel}</span></div>`);
+      }
+    }
+
+    const totalCells = offset + totalDays;
+    const trailing = (7 - (totalCells % 7)) % 7;
+    for(let i = 0; i < trailing; i += 1){
+      parts.push('<div class="day empty"></div>');
+    }
+
+    parts.push('</div>');
+    parts.push('</div>');
+  });
+
+  container.innerHTML = parts.join('');
 }
