@@ -258,6 +258,11 @@ function renderMonthlyTiles(summary){
   const monthDailyChars = summary?.monthDailyChars || {};
   console.log('[monthly] tiles render', Object.keys(monthDailyChars).length);
 
+  if(!summary){
+    container.innerHTML = '';
+    return;
+  }
+
   const weekdayLabels = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
   const now = new Date();
   const currentMonthStart = new Date(now.getFullYear(), now.getMonth(), 1);
@@ -276,7 +281,7 @@ function renderMonthlyTiles(summary){
     const totalDays = new Date(year, monthIndex + 1, 0).getDate();
     const offset = (firstDay.getDay() + 6) % 7;
 
-    const monthSection = document.createElement('div');
+    const monthSection = document.createElement('section');
     monthSection.className = 'month';
 
     const titleEl = document.createElement('div');
@@ -285,8 +290,12 @@ function renderMonthlyTiles(summary){
     monthSection.appendChild(titleEl);
 
     const dowEl = document.createElement('div');
-    dowEl.className = 'dow';
-    dowEl.textContent = weekdayLabels.join(' ');
+    dowEl.className = 'dow month-grid';
+    weekdayLabels.forEach(label => {
+      const cell = document.createElement('div');
+      cell.textContent = label;
+      dowEl.appendChild(cell);
+    });
     monthSection.appendChild(dowEl);
 
     const monthGrid = document.createElement('div');
@@ -313,12 +322,12 @@ function renderMonthlyTiles(summary){
         dayEl.classList.add('zero');
       }
 
-      const dayNumber = document.createElement('span');
+      const dayNumber = document.createElement('div');
       dayNumber.className = 'd';
-      dayNumber.textContent = String(day).padStart(2, '0');
+      dayNumber.textContent = String(day);
       dayEl.appendChild(dayNumber);
 
-      const countEl = document.createElement('span');
+      const countEl = document.createElement('div');
       countEl.className = 'cnt';
       countEl.textContent = formatCount(safeCount);
       dayEl.appendChild(countEl);
