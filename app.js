@@ -67,7 +67,7 @@ document.querySelectorAll('.theme').forEach(btn=>{
 // —— 文件与预检（保持原有逻辑）
 let fileHandle = null;
 $('#file').onchange = (e)=>{ fileHandle = e.target.files?.[0] || null; $('#status').textContent = fileHandle? `已选择：${fileHandle.name}`:'未加载文件'; };
-const worker = new Worker('./parser.worker.js?v=3', {type:'module'});
+const worker = new Worker('./parser.worker.js?v=8', {type:'module'});
 let currentSummary = null;
 
 $('#runPrecheck').onclick = ()=>{
@@ -94,6 +94,11 @@ worker.onmessage = (e)=>{
     const {summary = null} = data;
     currentSummary = summary;
     renderSummaryBasics(summary);
+    const hotSlot = summarizeHotSlot(summary?.timeOfDay);
+    $('#hotSlot').textContent = hotSlot || '—';
+    const streaks = calcStreaks(summary?.dayActive);
+    $('#streakNow').textContent = streaks.now || '—';
+    $('#streakMax').textContent = streaks.max || '—';
     let statusText = '解析完成';
     if(summary?.samplingNote === true){
       statusText += '（性能保护：基于抽样）';
@@ -157,52 +162,77 @@ function renderSummaryBasics(summary){
 }
 
 function summarizeHotSlot(timeOfDay){
-  if(!Array.isArray(timeOfDay) || !timeOfDay.length){ return ''; }
-  const slots = ['0-3','3-6','6-9','9-12','12-15','15-18','18-21','21-24'];
-  let bestIdx = 0;
-  let bestVal = -Infinity;
-  timeOfDay.forEach((val, idx)=>{
-    if((val ?? 0) > bestVal){
-      bestVal = val ?? 0;
-      bestIdx = idx;
+  if(!Array.isArray(timeOfDay) || timeOfDay.length !== 8){ return ''; }
+  const values = timeOfDay.map(v => Number(v) || 0);
+  const maxVal = Math.max(...values);
+  if(maxVal <= 0){ return ''; }
+  const tz = -new Date().getTimezoneOffset() / 60;
+  const fmt = h => String(h).padStart(2, '0') + ':00';
+  const binToLocal = (i)=>{
+    const startHour = ((i * 3 + tz) % 24 + 24) % 24;
+    const startValue = Math.floor(startHour + 1e-9);
+    const endValue = (startValue + 3) % 24;
+    const startLabel = fmt(startValue);
+    if(endValue === 0){
+      return `${startLabel}–24:00`;
     }
-  });
-  if(bestVal <= 0){ return ''; }
-  return slots[bestIdx] || '';
+    return `${startLabel}–${fmt(endValue)}`;
+  };
+  const slots = values
+    .map((val, idx) => ({ val, idx }))
+    .filter(item => item.val === maxVal)
+    .map(item => binToLocal(item.idx));
+  return slots.join(', ');
 }
 
 function calcStreaks(dayActive){
   if(!Array.isArray(dayActive) || !dayActive.length){
-    return {now: '—', max: '—'};
+    return {now: '', max: ''};
   }
-  const sortedDays = [...dayActive].sort();
-  let nowStreak = 1;
-  let maxStreak = 1;
-  let currentStreak = 1;
+  const uniqueSorted = Array.from(new Set(dayActive)).sort();
+  if(!uniqueSorted.length){
+    return {now: '', max: ''};
+  }
 
-  for(let i=1;i<sortedDays.length;i++){
-    const prev = new Date(sortedDays[i-1]);
-    const curr = new Date(sortedDays[i]);
-    const diff = (curr - prev) / (1000*60*60*24);
-    if(Math.abs(diff - 1) < 0.01){
-      currentStreak += 1;
-    } else {
-      currentStreak = 1;
+  const runs = [];
+  let runStart = uniqueSorted[0];
+  let runEnd = uniqueSorted[0];
+  let runLength = 1;
+
+  const toMidnightDate = (str)=> new Date(`${str}T00:00:00`);
+  for(let i = 1; i < uniqueSorted.length; i += 1){
+    const prevDate = toMidnightDate(uniqueSorted[i - 1]);
+    const currDate = toMidnightDate(uniqueSorted[i]);
+    const diffDays = Math.round((currDate - prevDate) / 86400000);
+    if(diffDays === 1){
+      runEnd = uniqueSorted[i];
+      runLength += 1;
+    }else{
+      runs.push({ start: runStart, end: runEnd, length: runLength });
+      runStart = uniqueSorted[i];
+      runEnd = uniqueSorted[i];
+      runLength = 1;
     }
-    if(currentStreak > maxStreak){ maxStreak = currentStreak; }
   }
+  runs.push({ start: runStart, end: runEnd, length: runLength });
 
-  // Determine current streak (ending today)
-  const today = new Date();
-  const last = new Date(sortedDays[sortedDays.length - 1]);
-  const dayDiff = Math.floor((today.setHours(0,0,0,0) - last.setHours(0,0,0,0)) / (1000*60*60*24));
-  if(dayDiff === 0){
-    nowStreak = currentStreak;
-  } else if(dayDiff === 1){
-    nowStreak = currentStreak;
-  } else {
-    nowStreak = '—';
+  let maxRun = runs[0];
+  for(const run of runs){
+    if(run.length > maxRun.length || (run.length === maxRun.length && run.end > maxRun.end)){
+      maxRun = run;
+    }
   }
+  const currentRun = runs[runs.length - 1];
 
-  return {now: nowStreak, max: maxStreak};
+  return {
+    now: formatRun(currentRun),
+    max: formatRun(maxRun)
+  };
+}
+
+function formatRun(run){
+  if(!run){ return ''; }
+  const start = run.start.replaceAll('-', '/');
+  const end = run.end.replaceAll('-', '/');
+  return `${start}–${end} · ${run.length}天`;
 }

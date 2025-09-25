@@ -77,6 +77,7 @@ function summarizeFile(raw, {fileSize, mode}){
       skippedByNoTime:0
     }
   };
+  summary.debug.timeOfDayBasis = 'UTC';
 
   const counted = new WeakSet();
   const daySet = new Set();
@@ -110,7 +111,7 @@ function summarizeFile(raw, {fileSize, mode}){
           summary.earliestTs = ts;
         }
         const date = new Date(ts);
-        const slot = Math.min(7, Math.max(0, Math.floor(date.getHours() / 3)));
+        const slot = Math.min(7, Math.max(0, Math.floor(date.getUTCHours() / 3)));
         summary.timeOfDay[slot] = (summary.timeOfDay[slot] ?? 0) + 1;
         const dayKey = date.toISOString().slice(0,10);
         daySet.add(dayKey);
