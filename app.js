@@ -1,7 +1,7 @@
 const $ = (s)=>document.querySelector(s);
 const LS = {user:'md_user_name', asst:'md_asst_name', filter:'md_filter_mode', theme:'md_theme'};
 const defaults = {user:'Me', asst:'GPT', filter:'simple', theme:'Echoes'};
-let currentSummary = null;
+let lastSummary = null;
 
 const nameUserEl = $('#nameU');
 const nameAssistantEl = $('#nameA');
@@ -29,13 +29,13 @@ function applyNames(p){
   if(nameAssistantEl){ nameAssistantEl.textContent = p.asst; }
   $('#nameU2').textContent = p.user; $('#nameA2').textContent = p.asst;
   $('#userName').value = p.user; $('#assistantName').value = p.asst;
-  if(currentSummary){
-    renderSummaryBasics(currentSummary);
+  if(lastSummary){
+    renderSummaryBasics(lastSummary);
   }
 }
 function applyFilter(mode){
   document.querySelectorAll('input[name="filter"]').forEach(r=>r.checked=(r.value===mode));
-  $('#modeText').textContent = mode==='simple' ? '简单过滤' : '深度过滤';
+  renderKeywords(lastSummary);
 }
 function applyTheme(theme){
   document.body.setAttribute('data-theme', theme);
@@ -144,7 +144,7 @@ worker.onmessage = (e)=>{
     $('#status').textContent = `${pctText}% (${formatMB(loadedBytes)}/${formatMB(totalBytes)} MB)`;
   } else if(type==='done'){
     const {summary = null} = data;
-    currentSummary = summary;
+    lastSummary = summary;
     renderSummaryBasics(summary);
     let statusText = '解析完成';
     if(summary?.samplingNote === true){
@@ -152,6 +152,7 @@ worker.onmessage = (e)=>{
     }
     $('#status').textContent = statusText;
     renderMonthlyTiles(summary);
+    renderKeywords(summary);
   } else if(type==='error'){
     $('#status').textContent = data.message || '未知错误';
   }
@@ -171,6 +172,51 @@ function formatMB(bytes){
 function formatCount(value){
   if(!Number.isFinite(value)){ return '0'; }
   return Math.trunc(value).toLocaleString();
+}
+
+function renderKeywords(summary){
+  const modeTextEl = $('#modeText');
+  const radioMode = document.querySelector('input[name="filter"]:checked');
+  const displayMode = radioMode?.value || summary?.mode || defaults.filter;
+  if(modeTextEl){
+    modeTextEl.textContent = displayMode;
+  }
+
+  const titleEl = modeTextEl?.closest('.h2');
+  if(titleEl){
+    let noteEl = titleEl.querySelector('.kw-sampling-note');
+    if(summary?.samplingNote === true){
+      if(!noteEl){
+        noteEl = document.createElement('span');
+        noteEl.className = 'kw-sampling-note';
+        titleEl.appendChild(noteEl);
+      }
+      noteEl.textContent = ' （sampling based）';
+    }else if(noteEl){
+      noteEl.remove();
+    }
+  }
+
+  const container = $('#kw');
+  if(!container){ return; }
+  container.innerHTML = '';
+
+  const keywords = Array.isArray(summary?.keywords) ? summary.keywords.slice(0, 10) : [];
+  if(!keywords.length){ return; }
+
+  const fragment = document.createDocumentFragment();
+  for(const item of keywords){
+    const term = String(item?.term ?? '').trim();
+    if(!term){ continue; }
+    const countRaw = Number(item?.count);
+    const countText = Number.isFinite(countRaw) ? formatCount(countRaw) : '0';
+    const badge = document.createElement('span');
+    badge.className = 'badge';
+    badge.textContent = `${term} (${countText})`;
+    fragment.appendChild(badge);
+  }
+
+  container.appendChild(fragment);
 }
 
 function renderSummaryBasics(summary){
