@@ -6,8 +6,8 @@ let currentSummary = null;
 const nameUserEl = $('#nameU');
 const nameAssistantEl = $('#nameA');
 const overviewMetrics = {
-  user: buildOverviewMetric('#uChars'),
-  assistant: buildOverviewMetric('#aChars')
+  user: buildOverviewMetric('#uChars', '#uMsgs'),
+  assistant: buildOverviewMetric('#aChars', '#aMsgs')
 };
 const timeMetrics = setupTimeElements();
 const streakMetrics = setupStreakElements();
@@ -44,11 +44,10 @@ function applyTheme(theme){
   });
 }
 
-function buildOverviewMetric(selector){
-  const kpi = $(selector);
-  const metric = kpi ? kpi.closest('.metric') : null;
-  const detail = metric ? metric.querySelector('.sub') : null;
-  return {kpi, metric, detail};
+function buildOverviewMetric(charSelector, msgSelector){
+  const chars = $(charSelector);
+  const msgs = $(msgSelector);
+  return {chars, msgs};
 }
 
 function setupTimeElements(){
@@ -182,12 +181,10 @@ function renderSummaryBasics(summary){
 
 function renderOverviewMetrics(summary){
   const userData = summary ? {
-    name: getDisplayName(nameUserEl, defaults.user),
     chars: Number(summary?.totalChars?.user ?? 0),
     msgs: Number(summary?.totalMsgs?.user ?? 0)
   } : null;
   const assistantData = summary ? {
-    name: getDisplayName(nameAssistantEl, defaults.asst),
     chars: Number(summary?.totalChars?.assistant ?? 0),
     msgs: Number(summary?.totalMsgs?.assistant ?? 0)
   } : null;
@@ -196,18 +193,16 @@ function renderOverviewMetrics(summary){
 }
 
 function updateOverviewMetric(target, data){
-  if(!target?.kpi){ return; }
+  if(!target?.chars || !target?.msgs){ return; }
   if(!data){
-    target.kpi.textContent = '—';
-    if(target.detail){ target.detail.textContent = ''; }
+    target.chars.textContent = '—';
+    target.msgs.textContent = '—';
     return;
   }
   const charText = formatCount(data.chars);
   const msgText = formatCount(data.msgs);
-  target.kpi.textContent = `${data.name}：${charText} 字 · ${msgText} 条`;
-  if(target.detail){
-    target.detail.textContent = '';
-  }
+  target.chars.textContent = `${charText} 字`;
+  target.msgs.textContent = `${msgText} 条`;
 }
 
 function renderTimeMetrics(summary){
@@ -287,12 +282,6 @@ function updateStreakMetric(target, data){
 function streakRunsEqual(a, b){
   if(!a || !b){ return false; }
   return a.length === b.length && a.start === b.start && a.end === b.end;
-}
-
-function getDisplayName(el, fallback){
-  if(!el){ return fallback; }
-  const text = (el.textContent || '').trim();
-  return text || fallback;
 }
 
 function formatEarliestLines(ts){

@@ -18,6 +18,8 @@ h1{ font-size:28px; font-weight:800; letter-spacing:.2px; margin:0 0 16px }
 .mono{ font-variant-numeric:tabular-nums; font-feature-settings:"tnum" 1, "lnum" 1 }
 .muted{ opacity:.76 }
 .kpi{ font-size:clamp(28px,4vw,32px); font-weight:800; line-height:1.1 }
+.kpi-row{ margin-top:6px }
+.nowrap{ white-space:nowrap; word-break:keep-all }
 .label{ font-size:12px; font-weight:700; letter-spacing:.14em; text-transform:uppercase; opacity:.8 }
 .sub{ font-size:13px; opacity:.7; margin-top:8px }
 .sep{ height:1px; background:currentColor; opacity:.12; margin:8px 0 }
@@ -39,6 +41,8 @@ h1{ font-size:28px; font-weight:800; letter-spacing:.2px; margin:0 0 16px }
 .hero .metric-group{ display:grid; gap:16px; grid-template-columns:repeat(auto-fit,minmax(180px,1fr)); margin-top:4px }
 .hero .metric{ display:flex; flex-direction:column; gap:4px }
 .hero .metric .kpi{ margin-top:4px }
+.hero .metric .kpi-row{ margin-top:6px }
+.hero .metric .kpi-row:first-of-type{ margin-top:4px }
 .hero .sub{ margin-top:0 }
 .hero-time #earliest{ display:block; max-width:14ch; word-break:break-word }
 .hero-streak-grid{ display:grid; gap:16px; grid-template-columns:repeat(auto-fit,minmax(120px,1fr)); }
@@ -145,13 +149,13 @@ body[data-theme="Emotion"]{
       <div class="metric-group">
         <div class="metric">
           <div class="label muted"><span id="nameU">Me</span></div>
-          <div class="kpi mono" id="uChars">0</div>
-          <div class="sub mono">字数・<span id="uMsgs">0</span> 条</div>
+          <div class="kpi mono nowrap kpi-row" id="uChars">0 字</div>
+          <div class="kpi mono nowrap kpi-row" id="uMsgs">0 条</div>
         </div>
         <div class="metric">
           <div class="label muted"><span id="nameA">GPT</span></div>
-          <div class="kpi mono" id="aChars">0</div>
-          <div class="sub mono">字数・<span id="aMsgs">0</span> 条</div>
+          <div class="kpi mono nowrap kpi-row" id="aChars">0 字</div>
+          <div class="kpi mono nowrap kpi-row" id="aMsgs">0 条</div>
         </div>
       </div>
     </div>
