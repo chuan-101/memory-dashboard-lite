@@ -69,6 +69,7 @@ let fileHandle = null;
 $('#file').onchange = (e)=>{ fileHandle = e.target.files?.[0] || null; $('#status').textContent = fileHandle? `已选择：${fileHandle.name}`:'未加载文件'; };
 const worker = new Worker('./parser.worker.js?v=7', {type:'module'});
 let currentSummary = null;
+let lastSummary = null;
 
 $('#runPrecheck').onclick = ()=>{
   if(!fileHandle){ $('#status').textContent = '请先选择 JSON 文件'; return; }
@@ -93,6 +94,7 @@ worker.onmessage = (e)=>{
   } else if(type==='done'){
     const {summary = null} = data;
     currentSummary = summary;
+    lastSummary = summary;
     renderSummaryBasics(summary);
     const hotSlot = summarizeHotSlot(summary?.timeOfDay);
     $('#hotSlot').textContent = hotSlot || '—';
@@ -104,6 +106,7 @@ worker.onmessage = (e)=>{
       statusText += '（性能保护：基于抽样）';
     }
     $('#status').textContent = statusText;
+    renderMonthGrid(lastSummary);
   } else if(type==='error'){
     $('#status').textContent = data.message || '未知错误';
   }
@@ -248,4 +251,72 @@ function formatRun(run){
   const start = run.start.replaceAll('-', '/');
   const end = run.end.replaceAll('-', '/');
   return `${start}–${end} · ${run.length}天`;
+}
+
+function renderMonthGrid(summary){
+  const container = $('#monthGrid');
+  if(!container){ return; }
+  if(!summary){
+    container.innerHTML = '';
+    return;
+  }
+
+  const monthDailyChars = summary?.monthDailyChars || {};
+  const weekdayLabels = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
+  const now = new Date();
+  const currentMonthStart = new Date(now.getFullYear(), now.getMonth(), 1);
+  const months = [];
+  for(let i = 0; i < 3; i += 1){
+    months.push(new Date(currentMonthStart.getFullYear(), currentMonthStart.getMonth() - i, 1));
+  }
+
+  const sections = months.map(monthDate => {
+    const year = monthDate.getFullYear();
+    const monthIndex = monthDate.getMonth();
+    const monthKey = `${year}-${String(monthIndex + 1).padStart(2, '0')}`;
+    const firstDay = new Date(year, monthIndex, 1);
+    const totalDays = new Date(year, monthIndex + 1, 0).getDate();
+    const offset = (firstDay.getDay() + 6) % 7;
+
+    const cells = [];
+    for(let i = 0; i < offset; i += 1){
+      cells.push('');
+    }
+    for(let day = 1; day <= totalDays; day += 1){
+      const dayKey = `${monthKey}-${String(day).padStart(2, '0')}`;
+      let safeCount = Number(monthDailyChars?.[dayKey]);
+      if(!Number.isFinite(safeCount)){
+        safeCount = 0;
+      }else{
+        safeCount = Math.trunc(safeCount);
+      }
+      const label = `${day}: ${safeCount}`;
+      cells.push(label);
+    }
+    while(cells.length % 7 !== 0){
+      cells.push('');
+    }
+
+    const headerRow = `<tr>${weekdayLabels.map(label => `<th>${label}</th>`).join('')}</tr>`;
+    const bodyRows = [];
+    for(let idx = 0; idx < cells.length; idx += 7){
+      const rowCells = cells
+        .slice(idx, idx + 7)
+        .map(cell => `<td>${cell || ''}</td>`)
+        .join('');
+      bodyRows.push(`<tr>${rowCells}</tr>`);
+    }
+
+    return `
+      <section class="month-block">
+        <h3>${monthKey}</h3>
+        <table class="month-grid-table">
+          ${headerRow}
+          ${bodyRows.join('')}
+        </table>
+      </section>
+    `;
+  });
+
+  container.innerHTML = sections.join('');
 }
