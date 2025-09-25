@@ -67,7 +67,7 @@ document.querySelectorAll('.theme').forEach(btn=>{
 // —— 文件与预检（保持原有逻辑）
 let fileHandle = null;
 $('#file').onchange = (e)=>{ fileHandle = e.target.files?.[0] || null; $('#status').textContent = fileHandle? `已选择：${fileHandle.name}`:'未加载文件'; };
-const worker = new Worker('./parser.worker.js?v=8', {type:'module'});
+const worker = new Worker('./parser.worker.js?v=7', {type:'module'});
 let currentSummary = null;
 
 $('#runPrecheck').onclick = ()=>{
@@ -166,23 +166,36 @@ function summarizeHotSlot(timeOfDay){
   const values = timeOfDay.map(v => Number(v) || 0);
   const maxVal = Math.max(...values);
   if(maxVal <= 0){ return ''; }
-  const tz = -new Date().getTimezoneOffset() / 60;
-  const fmt = h => String(h).padStart(2, '0') + ':00';
-  const binToLocal = (i)=>{
-    const startHour = ((i * 3 + tz) % 24 + 24) % 24;
-    const startValue = Math.floor(startHour + 1e-9);
-    const endValue = (startValue + 3) % 24;
-    const startLabel = fmt(startValue);
-    if(endValue === 0){
-      return `${startLabel}–24:00`;
-    }
-    return `${startLabel}–${fmt(endValue)}`;
-  };
+  const tzOffsetMinutes = -new Date().getTimezoneOffset();
   const slots = values
     .map((val, idx) => ({ val, idx }))
     .filter(item => item.val === maxVal)
-    .map(item => binToLocal(item.idx));
-  return slots.join(', ');
+    .map(item => {
+      const utcStartMin = item.idx * 180;
+      const localStartMin = (utcStartMin + tzOffsetMinutes + 1440) % 1440;
+      return formatSlotRange(localStartMin);
+    });
+  return slots.join('、');
+}
+
+function formatSlotRange(startMinutes){
+  const normalizedStart = ((startMinutes % 1440) + 1440) % 1440;
+  const rawEnd = normalizedStart + 180;
+  const startLabel = formatHourMinute(normalizedStart);
+  let endLabel;
+  if(rawEnd === 1440){
+    endLabel = '24:00';
+  }else{
+    endLabel = formatHourMinute(rawEnd % 1440);
+  }
+  return `${startLabel}–${endLabel}`;
+}
+
+function formatHourMinute(totalMinutes){
+  const normalized = ((totalMinutes % 1440) + 1440) % 1440;
+  const hours = Math.floor(normalized / 60);
+  const minutes = normalized % 60;
+  return `${hours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')}`;
 }
 
 function calcStreaks(dayActive){
