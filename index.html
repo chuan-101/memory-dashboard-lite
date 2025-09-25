@@ -37,6 +37,50 @@ button.ghost{ background:var(--surface); color:var(--text) }
 .theme[aria-pressed="true"]{ outline:2px solid var(--accent) }
 .badge{ display:inline-block; padding:2px 8px; border-radius:999px; background:var(--accent); color:var(--accent-contrast); font-weight:700 }
 
+#monthGrid{ margin-top:12px; }
+#monthGrid .month{ margin:12px 0 16px; }
+#monthGrid .month:first-child{ margin-top:0; }
+#monthGrid .month-title{
+  font-weight:800;
+  margin:4px 0 8px;
+}
+#monthGrid .month-grid{
+  display:grid;
+  grid-template-columns:repeat(7,1fr);
+  gap:8px;
+}
+#monthGrid .dow{
+  font-weight:700;
+  margin-bottom:6px;
+  opacity:.8;
+}
+#monthGrid .day{
+  background:var(--surface);
+  border-radius:var(--radius);
+  padding:8px 6px;
+  min-height:58px;
+  display:flex;
+  flex-direction:column;
+  justify-content:space-between;
+  align-items:flex-start;
+  font-variant-numeric:tabular-nums;
+}
+#monthGrid .day .d{
+  font-weight:700;
+  opacity:.9;
+}
+#monthGrid .day .cnt{
+  font-size:12px;
+  opacity:.9;
+}
+#monthGrid .day.zero{ opacity:.45; }
+#monthGrid .day.empty{ visibility:hidden; }
+
+@media (max-width:640px){
+  #monthGrid .month-grid{ gap:6px; }
+  #monthGrid .day{ min-height:54px; padding:6px; }
+}
+
 /* —— 主题（语义色：bg 最浅 / card 次浅 / surface 控件底 / accent 强调） —— */
 body[data-theme="Echoes"]{
   --bg:#aac1b0; --card:#f2eee1; --surface:#a7acb7; --accent:#617ba2; --accent-contrast:#fff; --text:#102010;
