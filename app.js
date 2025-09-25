@@ -67,7 +67,7 @@ document.querySelectorAll('.theme').forEach(btn=>{
 // —— 文件与预检（保持原有逻辑）
 let fileHandle = null;
 $('#file').onchange = (e)=>{ fileHandle = e.target.files?.[0] || null; $('#status').textContent = fileHandle? `已选择：${fileHandle.name}`:'未加载文件'; };
-const worker = new Worker('./parser.worker.js?v=8', {type:'module'});
+const worker = new Worker('./parser.worker.js?v=7', {type:'module'});
 let currentSummary = null;
 
 $('#runPrecheck').onclick = ()=>{
@@ -166,18 +166,16 @@ function summarizeHotSlot(timeOfDay){
   const values = timeOfDay.map(v => Number(v) || 0);
   const maxVal = Math.max(...values);
   if(maxVal <= 0){ return ''; }
-  const tzOffsetHours = -new Date().getTimezoneOffset() / 60;
-  const tzOffsetMinutes = Math.round(tzOffsetHours * 60);
+  const tzOffsetMinutes = -new Date().getTimezoneOffset();
   const slots = values
     .map((val, idx) => ({ val, idx }))
     .filter(item => item.val === maxVal)
-    .map(item => formatSlotFromBin(item.idx, tzOffsetMinutes));
-  return slots.join(', ');
-}
-
-function formatSlotFromBin(binIndex, tzOffsetMinutes){
-  const localStartMinutes = (binIndex * 180 + tzOffsetMinutes + 1440) % 1440;
-  return formatSlotRange(localStartMinutes);
+    .map(item => {
+      const utcStartMin = item.idx * 180;
+      const localStartMin = (utcStartMin + tzOffsetMinutes + 1440) % 1440;
+      return formatSlotRange(localStartMin);
+    });
+  return slots.join('、');
 }
 
 function formatSlotRange(startMinutes){
