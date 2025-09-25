@@ -1,7 +1,10 @@
 const $ = (s)=>document.querySelector(s);
 const LS = {user:'md_user_name', asst:'md_asst_name', filter:'md_filter_mode', theme:'md_theme'};
 const defaults = {user:'Me', asst:'GPT', filter:'simple', theme:'Echoes'};
-let currentSummary = null;
+let lastSummary = null;
+const WORKER_BASE_URL = './parser.worker.js?v=7';
+let worker = null;
+let parseDebounceTimer = null;
 
 const nameUserEl = $('#nameU');
 const nameAssistantEl = $('#nameA');
@@ -29,13 +32,58 @@ function applyNames(p){
   if(nameAssistantEl){ nameAssistantEl.textContent = p.asst; }
   $('#nameU2').textContent = p.user; $('#nameA2').textContent = p.asst;
   $('#userName').value = p.user; $('#assistantName').value = p.asst;
-  if(currentSummary){
-    renderSummaryBasics(currentSummary);
+  if(lastSummary){
+    renderSummaryBasics(lastSummary);
   }
 }
 function applyFilter(mode){
   document.querySelectorAll('input[name="filter"]').forEach(r=>r.checked=(r.value===mode));
-  $('#modeText').textContent = mode==='simple' ? '简单过滤' : '深度过滤';
+  renderKeywords(lastSummary);
+}
+
+function setParsingState(active){
+  document.querySelectorAll('input[name="filter"]').forEach(r=>{ r.disabled = active; });
+}
+
+function buildWorkerUrl(cacheBust){
+  if(!cacheBust){ return WORKER_BASE_URL; }
+  const separator = WORKER_BASE_URL.includes('?') ? '&' : '?';
+  return `${WORKER_BASE_URL}${separator}t=${Date.now()}`;
+}
+
+function getWorker(options = {}){
+  const {fresh = false, cacheBust = false} = options;
+  if(worker && fresh){
+    worker.terminate();
+    worker = null;
+  }
+  if(!worker){
+    worker = new Worker(buildWorkerUrl(cacheBust), {type:'module'});
+    worker.onmessage = handleWorkerMessage;
+    worker.onerror = handleWorkerError;
+  }
+  return worker;
+}
+
+function handleWorkerError(event){
+  console.error(event);
+  $('#status').textContent = event?.message || '解析出错';
+  setParsingState(false);
+}
+
+function scheduleModeReparse(mode){
+  if(!fileHandle){ return; }
+  if(parseDebounceTimer){
+    clearTimeout(parseDebounceTimer);
+  }
+  parseDebounceTimer = setTimeout(()=>{
+    parseDebounceTimer = null;
+    if(!fileHandle){ return; }
+    $('#status').textContent = 'Re-parsing for keyword mode…';
+    setParsingState(true);
+    const activeWorker = getWorker({fresh:true, cacheBust:true});
+    activeWorker.postMessage({ type:'parse', file:fileHandle, mode });
+  }, 300);
 }
 function applyTheme(theme){
   document.body.setAttribute('data-theme', theme);
@@ -103,8 +151,10 @@ $('#resetNames').onclick = ()=>{
 // —— 事件：过滤模式
 document.querySelectorAll('input[name="filter"]').forEach(r=>{
   r.onchange = ()=>{
-    localStorage.setItem(LS.filter, r.value);
-    applyFilter(r.value);
+    const mode = r.value;
+    localStorage.setItem(LS.filter, mode);
+    applyFilter(mode);
+    scheduleModeReparse(mode);
   };
 });
 
@@ -120,23 +170,30 @@ document.querySelectorAll('.theme').forEach(btn=>{
 // —— 文件与预检（保持原有逻辑）
 let fileHandle = null;
 $('#file').onchange = (e)=>{ fileHandle = e.target.files?.[0] || null; $('#status').textContent = fileHandle? `已选择：${fileHandle.name}`:'未加载文件'; };
-const worker = new Worker('./parser.worker.js?v=7', {type:'module'});
 
 $('#runPrecheck').onclick = ()=>{
   if(!fileHandle){ $('#status').textContent = '请先选择 JSON 文件'; return; }
+  if(parseDebounceTimer){
+    clearTimeout(parseDebounceTimer);
+    parseDebounceTimer = null;
+  }
   $('#status').textContent = '预检中…';
-  worker.postMessage({type:'precheck', file:fileHandle});
+  const activeWorker = getWorker();
+  activeWorker.postMessage({type:'precheck', file:fileHandle});
 };
-worker.onmessage = (e)=>{
+
+function handleWorkerMessage(e){
   const data = e.data || {};
   const {type} = data;
   if(type==='precheck'){
     const {ok, reason, hint} = data;
     $('#status').textContent = ok ? `预检通过：检测到 ChatGPT 导出结构${hint?`（${hint}）`:''}` : `预检失败：${reason || '未知原因'}`;
-    if (ok) {
-      const mode = localStorage.getItem('md_filter_mode') || 'simple';
-      worker.postMessage({ type:'parse', file:fileHandle, mode });
+    if(ok){
+      const mode = localStorage.getItem(LS.filter) || defaults.filter;
       $('#status').textContent = 'Precheck passed, parsing…';
+      setParsingState(true);
+      const activeWorker = getWorker();
+      activeWorker.postMessage({ type:'parse', file:fileHandle, mode });
     }
   } else if(type==='progress'){
     const {pct = 0, loadedBytes = 0, totalBytes = 0} = data;
@@ -144,7 +201,7 @@ worker.onmessage = (e)=>{
     $('#status').textContent = `${pctText}% (${formatMB(loadedBytes)}/${formatMB(totalBytes)} MB)`;
   } else if(type==='done'){
     const {summary = null} = data;
-    currentSummary = summary;
+    lastSummary = summary;
     renderSummaryBasics(summary);
     let statusText = '解析完成';
     if(summary?.samplingNote === true){
@@ -152,10 +209,13 @@ worker.onmessage = (e)=>{
     }
     $('#status').textContent = statusText;
     renderMonthlyTiles(summary);
+    renderKeywords(summary);
+    setParsingState(false);
   } else if(type==='error'){
     $('#status').textContent = data.message || '未知错误';
+    setParsingState(false);
   }
-};
+}
 
 function clampPct(pct){
   if(!Number.isFinite(pct)){ return '0'; }
@@ -171,6 +231,51 @@ function formatMB(bytes){
 function formatCount(value){
   if(!Number.isFinite(value)){ return '0'; }
   return Math.trunc(value).toLocaleString();
+}
+
+function renderKeywords(summary){
+  const modeTextEl = $('#modeText');
+  const radioMode = document.querySelector('input[name="filter"]:checked');
+  const displayMode = radioMode?.value || summary?.mode || defaults.filter;
+  if(modeTextEl){
+    modeTextEl.textContent = displayMode;
+  }
+
+  const titleEl = modeTextEl?.closest('.h2');
+  if(titleEl){
+    let noteEl = titleEl.querySelector('.kw-sampling-note');
+    if(summary?.samplingNote === true){
+      if(!noteEl){
+        noteEl = document.createElement('span');
+        noteEl.className = 'kw-sampling-note';
+        titleEl.appendChild(noteEl);
+      }
+      noteEl.textContent = ' （sampling based）';
+    }else if(noteEl){
+      noteEl.remove();
+    }
+  }
+
+  const container = $('#kw');
+  if(!container){ return; }
+  container.innerHTML = '';
+
+  const keywords = Array.isArray(summary?.keywords) ? summary.keywords.slice(0, 10) : [];
+  if(!keywords.length){ return; }
+
+  const fragment = document.createDocumentFragment();
+  for(const item of keywords){
+    const term = String(item?.term ?? '').trim();
+    if(!term){ continue; }
+    const countRaw = Number(item?.count);
+    const countText = Number.isFinite(countRaw) ? formatCount(countRaw) : '0';
+    const badge = document.createElement('span');
+    badge.className = 'badge';
+    badge.textContent = `${term} (${countText})`;
+    fragment.appendChild(badge);
+  }
+
+  container.appendChild(fragment);
 }
 
 function renderSummaryBasics(summary){
