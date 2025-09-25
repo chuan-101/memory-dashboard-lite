@@ -103,8 +103,10 @@ $('#resetNames').onclick = ()=>{
 // —— 事件：过滤模式
 document.querySelectorAll('input[name="filter"]').forEach(r=>{
   r.onchange = ()=>{
-    localStorage.setItem(LS.filter, r.value);
-    applyFilter(r.value);
+    const mode = r.value;
+    localStorage.setItem(LS.filter, mode);
+    applyFilter(mode);
+    scheduleModeReparse(mode);
   };
 });
 
@@ -120,23 +122,30 @@ document.querySelectorAll('.theme').forEach(btn=>{
 // —— 文件与预检（保持原有逻辑）
 let fileHandle = null;
 $('#file').onchange = (e)=>{ fileHandle = e.target.files?.[0] || null; $('#status').textContent = fileHandle? `已选择：${fileHandle.name}`:'未加载文件'; };
-const worker = new Worker('./parser.worker.js?v=7', {type:'module'});
 
 $('#runPrecheck').onclick = ()=>{
   if(!fileHandle){ $('#status').textContent = '请先选择 JSON 文件'; return; }
+  if(parseDebounceTimer){
+    clearTimeout(parseDebounceTimer);
+    parseDebounceTimer = null;
+  }
   $('#status').textContent = '预检中…';
-  worker.postMessage({type:'precheck', file:fileHandle});
+  const activeWorker = getWorker();
+  activeWorker.postMessage({type:'precheck', file:fileHandle});
 };
-worker.onmessage = (e)=>{
+
+function handleWorkerMessage(e){
   const data = e.data || {};
   const {type} = data;
   if(type==='precheck'){
     const {ok, reason, hint} = data;
     $('#status').textContent = ok ? `预检通过：检测到 ChatGPT 导出结构${hint?`（${hint}）`:''}` : `预检失败：${reason || '未知原因'}`;
-    if (ok) {
-      const mode = localStorage.getItem('md_filter_mode') || 'simple';
-      worker.postMessage({ type:'parse', file:fileHandle, mode });
+    if(ok){
+      const mode = localStorage.getItem(LS.filter) || defaults.filter;
       $('#status').textContent = 'Precheck passed, parsing…';
+      setParsingState(true);
+      const activeWorker = getWorker();
+      activeWorker.postMessage({ type:'parse', file:fileHandle, mode });
     }
   } else if(type==='progress'){
     const {pct = 0, loadedBytes = 0, totalBytes = 0} = data;
@@ -155,8 +164,9 @@ worker.onmessage = (e)=>{
     renderKeywords(summary);
   } else if(type==='error'){
     $('#status').textContent = data.message || '未知错误';
+    setParsingState(false);
   }
-};
+}
 
 function clampPct(pct){
   if(!Number.isFinite(pct)){ return '0'; }
