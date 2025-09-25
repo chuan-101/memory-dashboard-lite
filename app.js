@@ -2,9 +2,6 @@ const $ = (s)=>document.querySelector(s);
 const LS = {user:'md_user_name', asst:'md_asst_name', filter:'md_filter_mode', theme:'md_theme'};
 const defaults = {user:'Me', asst:'GPT', filter:'simple', theme:'Echoes'};
 let lastSummary = null;
-const WORKER_BASE_URL = './parser.worker.js?v=7';
-let worker = null;
-let parseDebounceTimer = null;
 
 const nameUserEl = $('#nameU');
 const nameAssistantEl = $('#nameA');
@@ -39,51 +36,6 @@ function applyNames(p){
 function applyFilter(mode){
   document.querySelectorAll('input[name="filter"]').forEach(r=>r.checked=(r.value===mode));
   renderKeywords(lastSummary);
-}
-
-function setParsingState(active){
-  document.querySelectorAll('input[name="filter"]').forEach(r=>{ r.disabled = active; });
-}
-
-function buildWorkerUrl(cacheBust){
-  if(!cacheBust){ return WORKER_BASE_URL; }
-  const separator = WORKER_BASE_URL.includes('?') ? '&' : '?';
-  return `${WORKER_BASE_URL}${separator}t=${Date.now()}`;
-}
-
-function getWorker(options = {}){
-  const {fresh = false, cacheBust = false} = options;
-  if(worker && fresh){
-    worker.terminate();
-    worker = null;
-  }
-  if(!worker){
-    worker = new Worker(buildWorkerUrl(cacheBust), {type:'module'});
-    worker.onmessage = handleWorkerMessage;
-    worker.onerror = handleWorkerError;
-  }
-  return worker;
-}
-
-function handleWorkerError(event){
-  console.error(event);
-  $('#status').textContent = event?.message || '解析出错';
-  setParsingState(false);
-}
-
-function scheduleModeReparse(mode){
-  if(!fileHandle){ return; }
-  if(parseDebounceTimer){
-    clearTimeout(parseDebounceTimer);
-  }
-  parseDebounceTimer = setTimeout(()=>{
-    parseDebounceTimer = null;
-    if(!fileHandle){ return; }
-    $('#status').textContent = 'Re-parsing for keyword mode…';
-    setParsingState(true);
-    const activeWorker = getWorker({fresh:true, cacheBust:true});
-    activeWorker.postMessage({ type:'parse', file:fileHandle, mode });
-  }, 300);
 }
 function applyTheme(theme){
   document.body.setAttribute('data-theme', theme);
@@ -210,7 +162,6 @@ function handleWorkerMessage(e){
     $('#status').textContent = statusText;
     renderMonthlyTiles(summary);
     renderKeywords(summary);
-    setParsingState(false);
   } else if(type==='error'){
     $('#status').textContent = data.message || '未知错误';
     setParsingState(false);
