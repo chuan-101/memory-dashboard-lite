@@ -156,24 +156,31 @@ body[data-theme="Emotion"]{
 .hl-top1{ background: var(--accent); color: var(--accent-contrast); }
 .hl-top2, .hl-top3{ box-shadow: 0 0 0 9999px rgba(0,0,0,0) inset; }
 
-/* —— Compact highlight grid —— */
+/* Highlights 5×2 小方块 —— 和月历 .day 同尺寸节奏 */
 .hl-grid{
-  display:grid;
-  grid-template-columns: repeat(5, minmax(0,1fr));
-  gap:10px;
-  margin-top:8px;
+  display: grid;
+  grid-template-columns: repeat(5, 1fr); /* 一行 5 个 */
+  gap: 8px;                               /* 固定间距 */
+  margin-top: 8px;
 }
+/* 方块尺寸=月历 .day：min-height 60px + padding 8px；去掉大块/等比拉伸 */
 .hl-tile{
   background: var(--surface);
   border-radius: var(--radius);
-  padding: 4px 6px;
-  aspect-ratio: 1 / 1;
-  display:flex; flex-direction:column;
-  justify-content:space-between; align-items:flex-start;
+  padding: 8px;
+  min-height: 60px;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  align-items: flex-start;
   font-variant-numeric: tabular-nums;
+  /* 覆盖此前的大尺寸设置 */
+  aspect-ratio: auto !important;
 }
-.hl-date{ font-weight:700; line-height:1.2; opacity:.95; }
-.hl-chars{ font-size:12px; opacity:.95; }
+.hl-date{ font-weight: 700; line-height: 1.2; }
+.hl-chars{ font-size: 12px; opacity: .9; }
+
+/* 可选：仅高亮第 1 名 */
 .hl-top1{ background: var(--accent); color: var(--accent-contrast); }
 
 </style>
@@ -268,7 +275,7 @@ body[data-theme="Emotion"]{
 
   <div class="card" id="highlights">
     <div class="h2">高光（最近三个月）</div>
-    <div id="hlTopDays" class="hl-list"></div>
+    <div id="hlTopDays" class="hl-grid"></div>
   </div>
 
   <script type="module" src="./app.js?v=36"></script>
