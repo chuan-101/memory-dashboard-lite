@@ -10,7 +10,6 @@ const state = {
   parseDebounceTimer: null
 };
 
-const cancelButton = $('#cancelParse');
 const downloadButton = $('#downloadCsv');
 
 function spawnWorker(){
@@ -65,6 +64,17 @@ function setDownloadEnabled(canDownload){
 function setCancelEnabled(isEnabled){
   if(cancelButton){
     cancelButton.disabled = !isEnabled;
+  }
+}
+
+if(downloadButton){
+  downloadButton.addEventListener('click', onDownloadCsv);
+  setDownloadEnabled(Boolean(lastSummary));
+}
+
+function setDownloadEnabled(canDownload){
+  if(downloadButton){
+    downloadButton.disabled = !canDownload;
   }
 }
 
@@ -222,10 +232,6 @@ function onWorkerMessage(e){
     $('#status').textContent = data.message || '未知错误';
     setParsingState(false);
     setDownloadEnabled(Boolean(lastSummary));
-    if(state.worker){
-      state.worker.terminate();
-      state.worker = null;
-    }
   }
 }
 
