@@ -1,18 +1,19 @@
 const $ = (s)=>document.querySelector(s);
 const LS = {user:'md_user_name', asst:'md_asst_name', theme:'md_theme'};
 const defaults = {user:'Me', asst:'GPT', theme:'Echoes'};
-let lastSummary = null;
+const numberFormatter = new Intl.NumberFormat();
 
 const state = {
   file: null,
-  worker: null
+  worker: null,
+  lastSummary: null
 };
 
 function spawnWorker(){
   if(state.worker){
     state.worker.terminate();
   }
-  state.worker = new Worker('./parser.worker.js?v=26', { type: 'module' });
+  state.worker = new Worker('./parser.worker.js?v=35', { type: 'module' });
   state.worker.onmessage = onWorkerMessage;
 }
 
@@ -41,6 +42,9 @@ const overviewMetrics = {
 };
 const timeMetrics = setupTimeElements();
 const streakMetrics = setupStreakElements();
+const highlights = setupHighlightElements();
+
+renderHighlights(null);
 
 // —— 读取与应用偏好
 function loadPrefs(){
@@ -58,8 +62,8 @@ function applyNames(p){
   if(nameAssistantEl){ nameAssistantEl.textContent = p.asst; }
   $('#nameU2').textContent = p.user; $('#nameA2').textContent = p.asst;
   $('#userName').value = p.user; $('#assistantName').value = p.asst;
-  if(lastSummary){
-    renderSummaryBasics(lastSummary);
+  if(state.lastSummary){
+    renderSummaryBasics(state.lastSummary);
   }
 }
 function applyTheme(theme){
@@ -97,6 +101,13 @@ function setupStreakElements(){
   return {
     now: {kpi: nowKpi, metric: nowMetric, detail: nowDetail},
     max: {kpi: maxKpi, metric: maxMetric, detail: maxDetail}
+  };
+}
+
+function setupHighlightElements(){
+  return {
+    topDays: $('#hlTopDays'),
+    ratios: $('#hlRatios')
   };
 }
 
@@ -165,7 +176,7 @@ function onWorkerMessage(e){
     $('#status').textContent = `Parsing… ${pctText}% (${formatMB(loadedBytes)}/${formatMB(totalBytes)} MB)`;
   } else if(type==='done'){
     const {summary = null} = data;
-    lastSummary = summary;
+    state.lastSummary = summary;
     if(typeof window !== 'undefined'){
       window.lastSummary = summary;
     }
@@ -176,6 +187,7 @@ function onWorkerMessage(e){
     }
     $('#status').textContent = statusText;
     renderMonthlyTiles(summary);
+    renderHighlights(summary);
     setParsingState(false);
   } else if(type==='error'){
     $('#status').textContent = data.message || '未知错误';
@@ -531,4 +543,60 @@ function renderMonthlyTiles(summary){
 
   container.innerHTML = '';
   container.appendChild(fragment);
+}
+
+function renderHighlights(summary){
+  const topDaysEl = highlights?.topDays;
+  if(!topDaysEl){ return; }
+
+  const emptyText = 'No activity in the recent 3-month window.';
+  const monthDailyChars = summary?.monthDailyChars;
+  if(!monthDailyChars || Object.keys(monthDailyChars).length === 0){
+    topDaysEl.textContent = emptyText;
+    return;
+  }
+
+  const entries = Object.entries(monthDailyChars)
+    .map(([date, value]) => ({ date, chars: Number(value) }))
+    .filter(item => Number.isFinite(item.chars));
+
+  if(entries.length === 0){
+    topDaysEl.textContent = emptyText;
+    return;
+  }
+
+  entries.sort((a, b) => {
+    if(b.chars !== a.chars){
+      return b.chars - a.chars;
+    }
+    return a.date.localeCompare(b.date);
+  });
+
+  const topTen = entries.slice(0, 10);
+  if(!topTen.length){
+    topDaysEl.textContent = emptyText;
+    return;
+  }
+
+  const fragment = document.createDocumentFragment();
+
+  topTen.forEach(item => {
+    const row = document.createElement('div');
+    row.className = 'hl-item';
+
+    const dateSpan = document.createElement('span');
+    dateSpan.className = 'hl-date';
+    dateSpan.textContent = item.date;
+    row.appendChild(dateSpan);
+
+    const valueSpan = document.createElement('span');
+    valueSpan.className = 'hl-val';
+    valueSpan.textContent = numberFormatter.format(Math.trunc(item.chars));
+    row.appendChild(valueSpan);
+
+    fragment.appendChild(row);
+  });
+
+  topDaysEl.innerHTML = '';
+  topDaysEl.appendChild(fragment);
 }

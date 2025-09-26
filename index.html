@@ -125,12 +125,17 @@ body[data-theme="Emotion"]{
 
 /* 行间距：两行别贴太近 */
 .card > .row{ margin:6px 0; }
-.theme-row{ 
+.theme-row{
   justify-content:flex-start;   /* 主题行左对齐 */
-  gap:8px; 
-  margin-top:10px; 
+  gap:8px;
+  margin-top:10px;
 }
-  
+
+.hl-list{ display:flex; flex-direction:column; gap:6px; }
+.hl-item{ display:flex; justify-content:space-between; }
+.hl-date{ font-weight:700; }
+.hl-val{ font-variant-numeric: tabular-nums; }
+
 </style>
 
 </head>
@@ -221,6 +226,12 @@ body[data-theme="Emotion"]{
 
   </div>
 
-  <script type="module" src="./app.js?v=26"></script>
+  <div class="card" id="highlights">
+    <div class="h2">Highlights (recent 3 months)</div>
+    <div id="hlRatios"></div>
+    <div id="hlTopDays" class="hl-list"></div>
+  </div>
+
+  <script type="module" src="./app.js?v=35"></script>
 </body>
 </html>
