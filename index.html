@@ -306,6 +306,37 @@ body[data-theme="Retro"]{
 .hl-date{ text-align:center; font-size: clamp(12px, 15cqw, 14px); }
 .hl-chars{ text-align:center; font-size: clamp(10px, 11.5cqw, 12px); }
 
+/* 月历小方块：内容居中+自适应字号，避免被圆角裁掉 */
+.day{
+  padding: 6px 8px;                 /* 左右对称即可 */
+  min-height: 56px;
+  box-sizing: border-box;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  align-items: center;              /* 关键：水平居中 */
+  overflow: hidden;
+}
+
+.day .d,
+.day .cnt{
+  display: block;
+  max-width: 100%;
+  text-align: center;               /* 居中避免贴边 */
+  white-space: nowrap;              /* 不换行 */
+  font-variant-numeric: tabular-nums; /* 等宽数字更稳 */
+  letter-spacing: 0;                /* 去掉负字距，避免右侧被挤 */
+}
+
+/* 自适应字号：再小一点，防 168,866 这类被裁 */
+.day .d   { font-weight:700; line-height:1.15; font-size: clamp(12px, 2.8vw, 14px); }
+.day .cnt { line-height:1.1;  font-size: clamp(10px, 2.1vw, 12px); }
+
+@media (max-width:420px){
+  .month-grid{ gap:6px; padding:0 6px; }
+  .day{ min-height:54px; }
+}
+
 </style>
 
 </head>
