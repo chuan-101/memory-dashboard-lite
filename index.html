@@ -68,6 +68,8 @@ h1{ font-size:28px; font-weight:800; letter-spacing:.2px; margin:0 0 16px }
 @media (max-width:860px){ .hero-grid .hero-time,.hero-grid .hero-streak{ grid-column:span 12 } }
 
 .row{ display:flex; gap:10px; flex-wrap:wrap; align-items:center }
+.theme-row{ justify-content:flex-end; gap:8px; }
+@media (max-width:860px){ .theme-row{ justify-content:flex-start; } }
 .input{ padding:8px 10px; border:none; border-radius:12px; background:var(--surface); color:var(--text) }
 button{ padding:8px 12px; border:none; border-radius:12px; background:var(--accent); color:var(--accent-contrast); cursor:pointer; font-weight:600 }
 button.ghost{ background:var(--surface); color:var(--text) }
