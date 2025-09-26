@@ -16,14 +16,15 @@ function spawnWorker(){
   if(state.worker){
     state.worker.terminate();
   }
-  const cacheBust = `v=19&cache=${Date.now()}`;
-  state.worker = new Worker(`./parser.worker.js?${cacheBust}`, {type:'module'});
+  state.worker = new Worker('./parser.worker.js?v=24', {type:'module'});
   state.worker.onmessage = onWorkerMessage;
 }
 
 function startParse(){
   if(!state.file){
-    $('#status').textContent = 'Please choose a JSON file first';
+    if(els.status){
+      els.status.textContent = 'Please choose a JSON file first';
+    }
     return;
   }
   clearParseDebounce();
@@ -33,6 +34,8 @@ function startParse(){
     setParsingState(true);
     setDownloadEnabled(false);
     state.worker.postMessage({type:'parse', file: state.file});
+  }else{
+    setCancelEnabled(false);
   }
 }
 
@@ -183,12 +186,16 @@ document.querySelectorAll('.theme').forEach(btn=>{
 // —— 文件与预检（保持原有逻辑）
 $('#file').onchange = (e)=>{
   state.file = e.target.files?.[0] || null;
-  $('#status').textContent = state.file ? `已选择：${state.file.name}` : '未加载文件';
+  if(els.status){
+    els.status.textContent = state.file ? `已选择：${state.file.name}` : '未加载文件';
+  }
 };
 
 $('#runPrecheck').onclick = ()=>{
-  if(!state.file){ $('#status').textContent = '请先选择 JSON 文件'; return; }
-  $('#status').textContent = '预检中…';
+  if(!state.file){ if(els.status){ els.status.textContent = '请先选择 JSON 文件'; } return; }
+  if(els.status){
+    els.status.textContent = '预检中…';
+  }
   spawnWorker();
   if(state.worker){
     state.worker.postMessage({type:'precheck', file: state.file});
@@ -200,15 +207,21 @@ function onWorkerMessage(e){
   const {type} = data;
   if(type==='precheck'){
     const {ok, reason, hint} = data;
-    $('#status').textContent = ok ? `预检通过：检测到 ChatGPT 导出结构${hint?`（${hint}）`:''}` : `预检失败：${reason || '未知原因'}`;
+    if(els.status){
+      els.status.textContent = ok ? `预检通过：检测到 ChatGPT 导出结构${hint?`（${hint}）`:''}` : `预检失败：${reason || '未知原因'}`;
+    }
     if(ok){
       startParse();
-      $('#status').textContent = '预检通过，开始解析…';
+      if(els.status){
+        els.status.textContent = '预检通过，开始解析…';
+      }
     }
   } else if(type==='progress'){
     const {pct = 0, loadedBytes = 0, totalBytes = 0} = data;
     const pctText = clampPct(pct);
-    $('#status').textContent = `Parsing… ${pctText}% (${formatMB(loadedBytes)}/${formatMB(totalBytes)} MB)`;
+    if(els.status){
+      els.status.textContent = `Parsing… ${pctText}% (${formatMB(loadedBytes)}/${formatMB(totalBytes)} MB)`;
+    }
   } else if(type==='done'){
     const {summary = null} = data;
     lastSummary = summary;
@@ -221,7 +234,9 @@ function onWorkerMessage(e){
     if(summary?.samplingNote === true){
       statusText += '（性能保护：基于抽样）';
     }
-    $('#status').textContent = statusText;
+    if(els.status){
+      els.status.textContent = statusText;
+    }
     renderMonthlyTiles(summary);
     setParsingState(false);
     if(state.worker){
@@ -229,7 +244,9 @@ function onWorkerMessage(e){
       state.worker = null;
     }
   } else if(type==='error'){
-    $('#status').textContent = data.message || '未知错误';
+    if(els.status){
+      els.status.textContent = data.message || '未知错误';
+    }
     setParsingState(false);
     setDownloadEnabled(Boolean(lastSummary));
   }
