@@ -12,7 +12,7 @@ function spawnWorker(){
   if(state.worker){
     state.worker.terminate();
   }
-  state.worker = new Worker('./parser.worker.js?v=29', { type: 'module' });
+  state.worker = new Worker('./parser.worker.js?v=26', { type: 'module' });
   state.worker.onmessage = onWorkerMessage;
 }
 
