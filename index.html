@@ -55,18 +55,25 @@ h1{ font-size:28px; font-weight:800; letter-spacing:.2px; margin:0 0 16px }
   background:var(--card); border:none; border-radius:var(--radius);
   padding:16px; margin:12px 0;
 }
+.grid{
+  display:grid; gap:12px;
+  grid-template-columns: repeat(12, minmax(0,1fr));
+}
+.col-12{grid-column:span 12}
+.col-6{grid-column:span 6}
+.col-4{grid-column:span 4}
+.col-8{grid-column:span 8}
+@media (max-width:860px){ .col-6,.col-4,.col-8{grid-column:span 12} }
 .hero-grid .hero-time,.hero-grid .hero-streak{ grid-column:span 6 }
 @media (max-width:860px){ .hero-grid .hero-time,.hero-grid .hero-streak{ grid-column:span 12 } }
 
 .row{ display:flex; gap:10px; flex-wrap:wrap; align-items:center }
 .input{ padding:8px 10px; border:none; border-radius:12px; background:var(--surface); color:var(--text) }
 button{ padding:8px 12px; border:none; border-radius:12px; background:var(--accent); color:var(--accent-contrast); cursor:pointer; font-weight:600 }
-button:disabled{ opacity:.5; cursor:not-allowed }
 button.ghost{ background:var(--surface); color:var(--text) }
 .theme{ font-weight:700; padding:6px 10px }
 .theme[aria-pressed="true"]{ outline:2px solid var(--accent) }
 .badge{ display:inline-block; padding:2px 8px; border-radius:999px; background:var(--accent); color:var(--accent-contrast); font-weight:700 }
-
 #monthGrid{ display:block; margin-top:12px; }
 .month{ margin:12px 0 16px; }
 .month-title{ font-weight:800; font-size:16px; margin:4px 0 8px; }
@@ -97,7 +104,7 @@ body[data-theme="Logic"]{
   --bg:#c9c0dd; --card:#f4f4f4; --surface:#b7c1d1; --accent:#7779b5; --accent-contrast:#fff; --text:#111;
 }
 body[data-theme="Emotion"]{
-  --bg:#eeeaeb; --card:#f4d0e2; --surface:#db8fb6; --accent:#313131; --accent-contrast:#fff; --text:#1a1a1a;
+  --bg:#e8e8e8; --card:#db8fb6; --surface:#f4d0e2; --accent:#3a3459; --accent-contrast:#fff; --text:#1a1a1a;
 }
 </style>
 
@@ -116,6 +123,8 @@ body[data-theme="Emotion"]{
       <span class="badge">仅近三月统计</span>
     </div>
     <div class="row" style="margin-top:8px">
+      <label><input type="radio" name="filter" value="simple" checked> 简单过滤</label>
+      <label><input type="radio" name="filter" value="deep"> 深度过滤</label>
       <span style="flex:1"></span>
       <span class="muted">主题：</span>
       <button class="theme ghost" data-theme="Echoes" aria-pressed="true">Echoes</button>
@@ -129,7 +138,6 @@ body[data-theme="Emotion"]{
     <div class="row">
       <input type="file" id="file" class="input" accept=".json">
       <button id="runPrecheck">结构预检</button>
-      <button id="downloadCsv" disabled>Download CSV</button>
       <span id="status" class="muted">未加载文件</span>
     </div>
   </div>
@@ -177,12 +185,16 @@ body[data-theme="Emotion"]{
   </div>
 
   <!-- 指标分卡片布局 -->
-  <div class="card">
-    <div class="h2">最近三月字数分布 Monthly</div>
-    <div id="monthHint" class="muted">将以纯文本呈现</div>
-    <div id="monthGrid"></div>
+  <div class="grid">
+    <!-- 近三月月历字数（纯文本） -->
+    <div class="card col-12">
+      <div class="h2">最近三月字数分布 Monthly</div>
+      <div id="monthHint" class="muted">将以纯文本呈现</div>
+      <div id="monthGrid"></div>
+    </div>
+
   </div>
 
-  <script type="module" src="./app.js?v=24"></script>
+  <script type="module" src="./app.js?v=rollback"></script>
 </body>
 </html>
