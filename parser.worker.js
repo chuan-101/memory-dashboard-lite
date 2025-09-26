@@ -98,9 +98,10 @@ function summarizeFile(raw, {fileSize}){
   summary.debug.recentWindow = { startLocal: kwWindow.startLocal, endLocal: kwWindow.endLocal };
   const keywordCounter = createKeywordCounter({
     mode,
+    windowStart: kwWindow.startMs,
+    windowEnd: kwWindow.endMs,
     debug: summary.debug.kw
   });
-  const feedKeywords = (text)=> keywordCounter.feed(text);
 
   const handleMessage = (msg)=>{
     if(!msg || typeof msg !== 'object') return false;
@@ -144,6 +145,8 @@ function summarizeFile(raw, {fileSize}){
       if(inWindow && visibleText){
         feedKeywords(visibleText, mode);
       }
+
+      keywordCounter.feed(text, ts);
     }
     return true;
   };
@@ -194,139 +197,50 @@ function formatLocalDate(date){
   return `${y}-${m}-${d}`;
 }
 
-function createKeywordCounter({ mode = 'simple', debug }){
+function createKeywordCounter({ mode = 'simple', windowStart, windowEnd, debug }){
   const counts = new Map();
   const encoder = new TextEncoder();
+  const tokenPattern = /[\p{Letter}\p{Number}][\p{Letter}\p{Number}\-_'’]*/gu;
   const stoplist = getStoplist();
-  const fillerSet = mode === 'deep' ? getFillerSet() : null;
-  const maxTracked = 200;
+  const minLength = mode === 'simple' ? 3 : 2;
 
   return {
-    feed(text){
+    feed(text, ts){
       if(!text || typeof text !== 'string') return;
+      if(ts == null || (windowStart != null && ts < windowStart) || (windowEnd != null && ts > windowEnd)) return;
+
       debug.msgsInWindow += 1;
       debug.textsBytes += encoder.encode(text).length;
 
-      const tokens = extractTokens(text, mode);
+      const tokens = extractTokens(text, tokenPattern);
       for(const token of tokens){
         if(!token) continue;
-        if(token.length < 2) continue;
+        if(token.length < minLength) continue;
         if(stoplist.has(token)) continue;
         if(/^[\d_\-]+$/.test(token)) continue;
-        if(fillerSet && fillerSet.has(token)) continue;
-
+        const nextCount = (counts.get(token) || 0) + 1;
+        counts.set(token, nextCount);
         debug.tokensKept += 1;
-
-        const current = counts.get(token);
-        if(current != null){
-          counts.set(token, current + 1);
-          continue;
-        }
-        if(counts.size < maxTracked){
-          counts.set(token, 1);
-          continue;
-        }
-
-        let minKey = null;
-        let minCount = Infinity;
-        for(const [term, count] of counts.entries()){
-          if(count < minCount){
-            minCount = count;
-            minKey = term;
-          }
-        }
-        if(minKey != null){
-          counts.delete(minKey);
-          counts.set(token, minCount + 1);
-        }
       }
     },
     finalize(){
-      let entries = Array.from(counts.entries())
-        .map(([term, count])=>({ term, count }));
-
-      if(mode === 'deep'){
-        entries = entries.filter(({ count })=> count >= 3);
-      }
-
-      entries.sort((a, b)=>{
-        if(b.count !== a.count) return b.count - a.count;
-        return a.term.localeCompare(b.term);
-      });
-
-      debug.topSample = entries.slice(0, 5).map(({term, count})=>({term, count}));
-      return entries.slice(0, 200);
+      const sorted = Array.from(counts.entries())
+        .map(([term, count])=>({ term, count }))
+        .sort((a, b)=>{
+          if(b.count !== a.count) return b.count - a.count;
+          return a.term.localeCompare(b.term);
+        });
+      debug.topSample = sorted.slice(0, 5).map(({term, count})=>({term, count}));
+      return sorted.slice(0, 200);
     }
   };
 }
 
-function extractTokens(text, mode){
-  const working = mode === 'deep' ? collapseRepeats(text) : text;
-  const lower = working.toLowerCase();
-  const tokens = [];
-
-  const englishMatches = lower.match(EN_TOKEN_PATTERN);
-  if(englishMatches){
-    for(const raw of englishMatches){
-      const token = raw.trim();
-      if(!token) continue;
-      if(token.length < 2) continue;
-      if(!LATIN_TOKEN_RE.test(token)) continue;
-      tokens.push(token);
-    }
-  }
-
-  const bigrams = extractCjkBigrams(working);
-  for(const gram of bigrams){
-    if(gram){ tokens.push(gram); }
-  }
-
-  return tokens;
-}
-
-const EN_TOKEN_PATTERN = /\b[\p{L}\p{N}_]+\b/gu;
-const LATIN_TOKEN_RE = /^[\p{Script=Latin}\p{Nd}_]+$/u;
-
-function collapseRepeats(text){
-  return text.replace(/(.)\1{2,}/gu, '$1');
-}
-
-function extractCjkBigrams(text){
-  const result = [];
-  let buffer = '';
-  const flush = ()=>{
-    if(buffer.length >= 2){
-      const chars = Array.from(buffer);
-      for(let i = 0; i < chars.length - 1; i += 1){
-        result.push(chars[i] + chars[i + 1]);
-      }
-    }
-    buffer = '';
-  };
-
-  for(const ch of text){
-    if(isCjkCharacter(ch)){
-      buffer += ch;
-    }else{
-      flush();
-    }
-  }
-  flush();
-  return result;
-}
-
-function isCjkCharacter(ch){
-  return /[\p{Script=Han}]/u.test(ch);
-}
-
-function getFillerSet(){
-  if(getFillerSet.cache){ return getFillerSet.cache; }
-  const phrases = [
-    '一下','这个','然后','就是','我你','你我','我们','他们','有没有','怎么说','那个','呃呃','所以说'
-  ];
-  const set = new Set(phrases);
-  getFillerSet.cache = set;
-  return set;
+function extractTokens(text, pattern){
+  const lower = text.toLowerCase();
+  const matches = lower.match(pattern);
+  if(!matches){ return []; }
+  return matches.map(t=>t.trim()).filter(Boolean);
 }
 
 function getStoplist(){
