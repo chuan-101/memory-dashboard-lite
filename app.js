@@ -10,22 +10,7 @@ const state = {
   parseDebounceTimer: null
 };
 
-// ---- UI helpers (single source of truth) ----
-const els = {
-  status: document.querySelector('#status'),
-  download: document.querySelector('#downloadCsv'),
-  cancel: document.querySelector('#cancelParse')
-};
-function setDownloadEnabled(enabled){
-  if(els.download){
-    els.download.disabled = !enabled;
-  }
-}
-function setCancelEnabled(enabled){
-  if(els.cancel){
-    els.cancel.disabled = !enabled;
-  }
-}
+const downloadButton = $('#downloadCsv');
 
 function spawnWorker(){
   if(state.worker){
@@ -43,14 +28,11 @@ function startParse(){
     return;
   }
   clearParseDebounce();
-  if(els.status){
-    els.status.textContent = 'Parsing…';
-  }
-  setDownloadEnabled(false);
+  $('#status').textContent = 'Parsing…';
   spawnWorker();
   if(state.worker){
     setParsingState(true);
-    setCancelEnabled(true);
+    setDownloadEnabled(false);
     state.worker.postMessage({type:'parse', file: state.file});
   }else{
     setCancelEnabled(false);
@@ -60,19 +42,43 @@ function startParse(){
 function setParsingState(isParsing){
   const active = Boolean(isParsing);
   document.body?.classList.toggle('is-parsing', active);
+  setCancelEnabled(active);
   if(!active){
     clearParseDebounce();
   }
 }
 
-if(els.download){
-  els.download.addEventListener('click', onDownloadCsv);
+if(downloadButton){
+  downloadButton.addEventListener('click', onDownloadCsv);
   setDownloadEnabled(Boolean(lastSummary));
 }
 
-if(els.cancel){
-  els.cancel.addEventListener('click', onCancelParse);
+if(cancelButton){
+  cancelButton.addEventListener('click', onCancelParse);
   setCancelEnabled(false);
+}
+
+function setDownloadEnabled(canDownload){
+  if(downloadButton){
+    downloadButton.disabled = !canDownload;
+  }
+}
+
+function setCancelEnabled(isEnabled){
+  if(cancelButton){
+    cancelButton.disabled = !isEnabled;
+  }
+}
+
+if(downloadButton){
+  downloadButton.addEventListener('click', onDownloadCsv);
+  setDownloadEnabled(Boolean(lastSummary));
+}
+
+function setDownloadEnabled(canDownload){
+  if(downloadButton){
+    downloadButton.disabled = !canDownload;
+  }
 }
 
 const nameUserEl = $('#nameU');
@@ -223,7 +229,6 @@ function onWorkerMessage(e){
       window.lastSummary = summary;
     }
     setDownloadEnabled(Boolean(summary));
-    setCancelEnabled(false);
     renderSummaryBasics(summary);
     let statusText = '解析完成';
     if(summary?.samplingNote === true){
@@ -234,7 +239,6 @@ function onWorkerMessage(e){
     }
     renderMonthlyTiles(summary);
     setParsingState(false);
-    clearParseDebounce();
     if(state.worker){
       state.worker.terminate();
       state.worker = null;
@@ -244,13 +248,7 @@ function onWorkerMessage(e){
       els.status.textContent = data.message || '未知错误';
     }
     setParsingState(false);
-    setDownloadEnabled(false);
-    setCancelEnabled(false);
-    clearParseDebounce();
-    if(state.worker){
-      state.worker.terminate();
-      state.worker = null;
-    }
+    setDownloadEnabled(Boolean(lastSummary));
   }
 }
 
@@ -260,11 +258,8 @@ function onCancelParse(){
   }
   state.worker = null;
   clearParseDebounce();
-  if(els.status){
-    els.status.textContent = 'Canceled.';
-  }
-  setDownloadEnabled(false);
-  setCancelEnabled(false);
+  $('#status').textContent = 'Canceled.';
+  setDownloadEnabled(Boolean(lastSummary));
   setParsingState(false);
 }
 
