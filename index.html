@@ -68,6 +68,8 @@ h1{ font-size:28px; font-weight:800; letter-spacing:.2px; margin:0 0 16px }
 @media (max-width:860px){ .hero-grid .hero-time,.hero-grid .hero-streak{ grid-column:span 12 } }
 
 .row{ display:flex; gap:10px; flex-wrap:wrap; align-items:center }
+.theme-row{ justify-content:flex-end; gap:8px; }
+@media (max-width:860px){ .theme-row{ justify-content:flex-start; } }
 .input{ padding:8px 10px; border:none; border-radius:12px; background:var(--surface); color:var(--text) }
 button{ padding:8px 12px; border:none; border-radius:12px; background:var(--accent); color:var(--accent-contrast); cursor:pointer; font-weight:600 }
 button.ghost{ background:var(--surface); color:var(--text) }
@@ -120,12 +122,10 @@ body[data-theme="Emotion"]{
       <label>对方显示名（assistant）<input id="assistantName" class="input" placeholder="GPT" type="text"></label>
       <button id="saveNames">保存并应用</button>
       <button id="resetNames" class="ghost">重置</button>
+      <span style="flex:1"></span>
       <span class="badge">仅近三月统计</span>
     </div>
-    <div class="row" style="margin-top:8px">
-      <label><input type="radio" name="filter" value="simple" checked> 简单过滤</label>
-      <label><input type="radio" name="filter" value="deep"> 深度过滤</label>
-      <span style="flex:1"></span>
+    <div class="row theme-row">
       <span class="muted">主题：</span>
       <button class="theme ghost" data-theme="Echoes" aria-pressed="true">Echoes</button>
       <button class="theme ghost" data-theme="Logic" aria-pressed="false">Logic</button>
@@ -195,6 +195,6 @@ body[data-theme="Emotion"]{
 
   </div>
 
-  <script type="module" src="./app.js?v=rollback"></script>
+  <script type="module" src="./app.js?v=26"></script>
 </body>
 </html>
