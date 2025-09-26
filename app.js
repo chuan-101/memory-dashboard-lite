@@ -1,38 +1,72 @@
 const $ = (s)=>document.querySelector(s);
 const LS = {user:'md_user_name', asst:'md_asst_name', theme:'md_theme'};
 const defaults = {user:'Me', asst:'GPT', theme:'Echoes'};
-let lastSummary = null;
+let currentNames = {user: defaults.user, asst: defaults.asst};
 
 const state = {
   file: null,
-  worker: null
+  worker: null,
+  parseDebounceTimer: null,
+  lastSummary: null
 };
+
+// ---- UI helpers (single source of truth) ----
+const els = {
+  status: document.querySelector('#status'),
+  download: document.querySelector('#downloadCsv'),
+  cancel: document.querySelector('#cancelParse')
+};
+
+function setParsingState(parsing){
+  const isParsing = Boolean(parsing);
+  if(els.cancel){
+    els.cancel.disabled = !isParsing;
+  }
+  if(els.download){
+    els.download.disabled = isParsing || !state.lastSummary;
+  }
+  if(document.body){
+    document.body.classList.toggle('is-parsing', isParsing);
+  }
+}
 
 function spawnWorker(){
   if(state.worker){
     state.worker.terminate();
   }
-  const cacheBust = `v=19&cache=${Date.now()}`;
-  state.worker = new Worker(`./parser.worker.js?${cacheBust}`, {type:'module'});
+  state.worker = new Worker('./parser.worker.js?v=25', {type:'module'});
   state.worker.onmessage = onWorkerMessage;
 }
 
 function startParse(){
   if(!state.file){
-    $('#status').textContent = 'Please choose a JSON file first';
+    if(els.status){
+      els.status.textContent = 'Please choose a JSON file first';
+    }
     return;
   }
-  $('#status').textContent = 'Parsing…';
+  clearParseDebounce();
+  if(els.status){
+    els.status.textContent = 'Parsing…';
+  }
   spawnWorker();
   if(state.worker){
     setParsingState(true);
     state.worker.postMessage({type:'parse', file: state.file});
+  }else{
+    setParsingState(false);
   }
 }
 
-function setParsingState(isParsing){
-  document.body?.classList.toggle('is-parsing', Boolean(isParsing));
+if(els.download){
+  els.download.addEventListener('click', onDownloadCsv);
 }
+
+if(els.cancel){
+  els.cancel.addEventListener('click', onCancelParse);
+}
+
+setParsingState(false);
 
 const nameUserEl = $('#nameU');
 const nameAssistantEl = $('#nameA');
@@ -59,8 +93,9 @@ function applyNames(p){
   if(nameAssistantEl){ nameAssistantEl.textContent = p.asst; }
   $('#nameU2').textContent = p.user; $('#nameA2').textContent = p.asst;
   $('#userName').value = p.user; $('#assistantName').value = p.asst;
-  if(lastSummary){
-    renderSummaryBasics(lastSummary);
+  currentNames = {user: p.user, asst: p.asst};
+  if(state.lastSummary){
+    renderSummaryBasics(state.lastSummary);
   }
 }
 function applyTheme(theme){
@@ -138,12 +173,16 @@ document.querySelectorAll('.theme').forEach(btn=>{
 // —— 文件与预检（保持原有逻辑）
 $('#file').onchange = (e)=>{
   state.file = e.target.files?.[0] || null;
-  $('#status').textContent = state.file ? `已选择：${state.file.name}` : '未加载文件';
+  if(els.status){
+    els.status.textContent = state.file ? `已选择：${state.file.name}` : '未加载文件';
+  }
 };
 
 $('#runPrecheck').onclick = ()=>{
-  if(!state.file){ $('#status').textContent = '请先选择 JSON 文件'; return; }
-  $('#status').textContent = '预检中…';
+  if(!state.file){ if(els.status){ els.status.textContent = '请先选择 JSON 文件'; } return; }
+  if(els.status){
+    els.status.textContent = '预检中…';
+  }
   spawnWorker();
   if(state.worker){
     state.worker.postMessage({type:'precheck', file: state.file});
@@ -155,33 +194,65 @@ function onWorkerMessage(e){
   const {type} = data;
   if(type==='precheck'){
     const {ok, reason, hint} = data;
-    $('#status').textContent = ok ? `预检通过：检测到 ChatGPT 导出结构${hint?`（${hint}）`:''}` : `预检失败：${reason || '未知原因'}`;
+    if(els.status){
+      els.status.textContent = ok ? `预检通过：检测到 ChatGPT 导出结构${hint?`（${hint}）`:''}` : `预检失败：${reason || '未知原因'}`;
+    }
     if(ok){
       startParse();
-      $('#status').textContent = '预检通过，开始解析…';
+      if(els.status){
+        els.status.textContent = '预检通过，开始解析…';
+      }
     }
   } else if(type==='progress'){
     const {pct = 0, loadedBytes = 0, totalBytes = 0} = data;
     const pctText = clampPct(pct);
-    $('#status').textContent = `Parsing… ${pctText}% (${formatMB(loadedBytes)}/${formatMB(totalBytes)} MB)`;
+    if(els.status){
+      els.status.textContent = `Parsing… ${pctText}% (${formatMB(loadedBytes)}/${formatMB(totalBytes)} MB)`;
+    }
   } else if(type==='done'){
     const {summary = null} = data;
-    lastSummary = summary;
+    state.lastSummary = summary;
     if(typeof window !== 'undefined'){
       window.lastSummary = summary;
     }
     renderSummaryBasics(summary);
-    let statusText = '解析完成';
-    if(summary?.samplingNote === true){
-      statusText += '（性能保护：基于抽样）';
-    }
-    $('#status').textContent = statusText;
     renderMonthlyTiles(summary);
+    if(els.status){
+      els.status.textContent = summary?.samplingNote ? '解析完成（性能保护：基于抽样）' : '解析完成';
+    }
     setParsingState(false);
+    clearParseDebounce();
+    if(state.worker){
+      state.worker.terminate();
+      state.worker = null;
+    }
   } else if(type==='error'){
-    $('#status').textContent = data.message || '未知错误';
+    if(els.status){
+      els.status.textContent = data.message || '未知错误';
+    }
     setParsingState(false);
+    clearParseDebounce();
+    if(state.worker){
+      state.worker.terminate();
+      state.worker = null;
+    }
   }
+}
+
+function onCancelParse(){
+  if(state.worker){
+    state.worker.terminate();
+  }
+  state.worker = null;
+  clearParseDebounce();
+  state.lastSummary = null;
+  if(typeof window !== 'undefined'){
+    window.lastSummary = null;
+  }
+  if(els.status){
+    els.status.textContent = 'Canceled.';
+  }
+  setParsingState(false);
 }
 
 function clampPct(pct){
@@ -382,6 +453,13 @@ function formatHourMinute(totalMinutes){
   return `${hours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')}`;
 }
 
+function clearParseDebounce(){
+  if(state.parseDebounceTimer){
+    clearTimeout(state.parseDebounceTimer);
+    state.parseDebounceTimer = null;
+  }
+}
+
 function calcStreaks(dayActive){
   if(!Array.isArray(dayActive) || !dayActive.length){
     return {now: null, max: null};
@@ -532,4 +610,150 @@ function renderMonthlyTiles(summary){
 
   container.innerHTML = '';
   container.appendChild(fragment);
+}
+
+function onDownloadCsv(){
+  if(!state.lastSummary){ return; }
+  const names = currentNames || defaults;
+  const summaryCsv = buildSummaryCsv(state.lastSummary, names);
+  const dailyCsv = buildDailyCharsCsv(state.lastSummary);
+  triggerCsvDownload('summary.csv', summaryCsv);
+  triggerCsvDownload('daily_chars_recent3m.csv', dailyCsv);
+}
+
+function buildSummaryCsv(summary, names){
+  const userName = ensureName(names?.user, defaults.user);
+  const assistantName = ensureName(names?.asst, defaults.asst);
+  const headers = [
+    `${userName} chars`,
+    `${userName} msgs`,
+    `${assistantName} chars`,
+    `${assistantName} msgs`,
+    'earliest_local (YYYY-MM-DD HH:mm)',
+    'hot_time_slots_local',
+    'hot_time_count',
+    'current_streak_days',
+    'current_streak_start',
+    'current_streak_end',
+    'max_streak_days',
+    'max_streak_start',
+    'max_streak_end'
+  ];
+
+  const earliestLocal = formatEarliestLocal(summary?.earliestTs);
+  const hotDetails = getHotSlotDetails(summary?.timeOfDay);
+  const streaks = calcStreaks(summary?.dayActive);
+  const currentRun = streaks?.now || null;
+  const maxRun = streaks?.max || null;
+
+  const values = [
+    toSafeInteger(summary?.totalChars?.user),
+    toSafeInteger(summary?.totalMsgs?.user),
+    toSafeInteger(summary?.totalChars?.assistant),
+    toSafeInteger(summary?.totalMsgs?.assistant),
+    earliestLocal,
+    hotDetails.ranges.join(', '),
+    hotDetails.count,
+    currentRun?.length || 0,
+    formatDateForCsv(currentRun?.start),
+    formatDateForCsv(currentRun?.end),
+    maxRun?.length || 0,
+    formatDateForCsv(maxRun?.start),
+    formatDateForCsv(maxRun?.end)
+  ];
+
+  return `${toCsvLine(headers)}\n${toCsvLine(values)}\n`;
+}
+
+function formatEarliestLocal(ts){
+  if(ts === undefined || ts === null){ return ''; }
+  const dt = new Date(ts);
+  if(Number.isNaN(dt.getTime())){ return ''; }
+  dt.setMinutes(0, 0, 0);
+  const year = dt.getFullYear();
+  const month = String(dt.getMonth() + 1).padStart(2, '0');
+  const day = String(dt.getDate()).padStart(2, '0');
+  const hour = String(dt.getHours()).padStart(2, '0');
+  const minute = String(dt.getMinutes()).padStart(2, '0');
+  return `${year}-${month}-${day} ${hour}:${minute}`;
+}
+
+function getHotSlotDetails(timeOfDay){
+  if(!Array.isArray(timeOfDay) || timeOfDay.length !== 8){
+    return {ranges: [], count: 0};
+  }
+  const values = timeOfDay.map(v => Number(v) || 0);
+  const maxVal = Math.max(...values);
+  if(maxVal <= 0){
+    return {ranges: [], count: 0};
+  }
+  const tzOffsetMinutes = -new Date().getTimezoneOffset();
+  const ranges = values
+    .map((val, idx) => ({val, idx}))
+    .filter(item => item.val === maxVal)
+    .map(item => {
+      const utcStartMin = item.idx * 180;
+      const localStartMin = (utcStartMin + tzOffsetMinutes + 1440) % 1440;
+      return {start: localStartMin, label: formatSlotRange(localStartMin)};
+    })
+    .sort((a, b) => a.start - b.start)
+    .map(item => item.label);
+  return {ranges, count: Math.round(maxVal)};
+}
+
+function formatDateForCsv(dateStr){
+  if(!dateStr){ return ''; }
+  return formatLocalDate(dateStr);
+}
+
+function buildDailyCharsCsv(summary){
+  const monthDailyChars = summary?.monthDailyChars || {};
+  const dates = Object.keys(monthDailyChars).sort();
+  const lines = dates.map(date => {
+    const chars = toSafeInteger(monthDailyChars[date]);
+    return toCsvLine([date, chars]);
+  });
+  const header = toCsvLine(['date', 'chars']);
+  return [header, ...lines].join('\n') + '\n';
+}
+
+function toCsvLine(values){
+  return values.map(escapeCsvValue).join(',');
+}
+
+function escapeCsvValue(value){
+  if(value === null || value === undefined){ return ''; }
+  const str = String(value);
+  if(str.includes('"') || str.includes(',') || str.includes('\n')){
+    return `"${str.replace(/"/g, '""')}"`;
+  }
+  return str;
+}
+
+function toSafeInteger(value){
+  const num = Number(value);
+  if(!Number.isFinite(num)){ return 0; }
+  return Math.round(num);
+}
+
+function ensureName(name, fallback){
+  const str = typeof name === 'string' ? name.trim() : '';
+  return str || fallback;
+}
+
+function triggerCsvDownload(filename, content){
+  try{
+    const blob = new Blob([content], {type: 'text/csv;charset=utf-8;'});
+    const link = document.createElement('a');
+    link.href = URL.createObjectURL(blob);
+    link.download = filename;
+    document.body.appendChild(link);
+    link.click();
+    setTimeout(()=>{
+      URL.revokeObjectURL(link.href);
+      link.remove();
+    }, 0);
+  }catch(err){
+    console.error('CSV download failed', err);
+  }
 }
