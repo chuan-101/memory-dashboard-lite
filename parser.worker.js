@@ -7,6 +7,57 @@ self.onmessage = async (e) => {
 const workerState = {
   mode: 'simple'
 };
+const keywordSamplerState = new WeakMap();
+const KEYWORD_TOKEN_PATTERN = /[\p{Letter}\p{Number}][\p{Letter}\p{Number}\-_'’]*/gu;
+
+function safeFeedKeywords(visibleText, mode, agg){
+  try{
+    if(!visibleText || typeof visibleText !== 'string') return;
+    if(typeof feedKeywords === 'function'){
+      feedKeywords(visibleText, mode, agg);
+    }
+  }catch(err){
+    if(agg && typeof agg === 'object'){
+      agg.debug = agg.debug || {};
+      agg.debug.kwErrors = (agg.debug.kwErrors || 0) + 1;
+    }
+  }
+}
+
+function feedKeywords(visibleText, mode, agg){
+  if(!agg || typeof agg !== 'object') return;
+  if(typeof visibleText !== 'string' || !visibleText) return;
+  if(!Array.isArray(agg.keywords)){
+    agg.keywords = [];
+  }
+
+  let state = keywordSamplerState.get(agg);
+  if(!state || state.mode !== mode){
+    state = { mode, counts: new Map() };
+    keywordSamplerState.set(agg, state);
+    agg.keywords = [];
+  }
+
+  const tokens = tokenize(visibleText, mode);
+  if(tokens.length === 0) return;
+
+  const stoplist = getStoplist();
+  const minLength = mode === 'simple' ? 3 : 2;
+  let changed = false;
+
+  for(const token of tokens){
+    if(token.length < minLength) continue;
+    if(stoplist.has(token)) continue;
+    if(/^[\d_\-]+$/.test(token)) continue;
+    const nextCount = (state.counts.get(token) || 0) + 1;
+    state.counts.set(token, nextCount);
+    changed = true;
+  }
+
+  if(!changed) return;
+
+  agg.keywords = sortKeywordCounts(state.counts).slice(0, 200);
+}
 
 function safeFeedKeywords(visibleText, mode, agg){
   try{
@@ -217,19 +268,18 @@ function formatLocalDate(date){
 function createKeywordCounter({ mode = 'simple', windowStart, windowEnd, debug }){
   const counts = new Map();
   const encoder = new TextEncoder();
-  const tokenPattern = /[\p{Letter}\p{Number}][\p{Letter}\p{Number}\-_'’]*/gu;
   const stoplist = getStoplist();
   const minLength = mode === 'simple' ? 3 : 2;
 
   return {
-    feed(text, ts){
-      if(!text || typeof text !== 'string') return;
+    feed(visibleText, ts){
+      if(!visibleText || typeof visibleText !== 'string') return;
       if(ts == null || (windowStart != null && ts < windowStart) || (windowEnd != null && ts > windowEnd)) return;
 
       debug.msgsInWindow += 1;
-      debug.textsBytes += encoder.encode(text).length;
+      debug.textsBytes += encoder.encode(visibleText).length;
 
-      const tokens = extractTokens(text, tokenPattern);
+      const tokens = tokenize(visibleText, mode);
       for(const token of tokens){
         if(!token) continue;
         if(token.length < minLength) continue;
@@ -241,23 +291,28 @@ function createKeywordCounter({ mode = 'simple', windowStart, windowEnd, debug }
       }
     },
     finalize(){
-      const sorted = Array.from(counts.entries())
-        .map(([term, count])=>({ term, count }))
-        .sort((a, b)=>{
-          if(b.count !== a.count) return b.count - a.count;
-          return a.term.localeCompare(b.term);
-        });
+      const sorted = sortKeywordCounts(counts);
       debug.topSample = sorted.slice(0, 5).map(({term, count})=>({term, count}));
       return sorted.slice(0, 200);
     }
   };
 }
 
-function extractTokens(text, pattern){
-  const lower = text.toLowerCase();
-  const matches = lower.match(pattern);
+function tokenize(s, mode){
+  if(typeof s !== 'string' || !s) return [];
+  const lower = s.toLowerCase();
+  const matches = lower.match(KEYWORD_TOKEN_PATTERN);
   if(!matches){ return []; }
-  return matches.map(t=>t.trim()).filter(Boolean);
+  return matches.map(token=>token.trim()).filter(Boolean);
+}
+
+function sortKeywordCounts(counts){
+  return Array.from(counts.entries())
+    .map(([term, count])=>({ term, count }))
+    .sort((a, b)=>{
+      if(b.count !== a.count) return b.count - a.count;
+      return a.term.localeCompare(b.term);
+    });
 }
 
 function getStoplist(){
