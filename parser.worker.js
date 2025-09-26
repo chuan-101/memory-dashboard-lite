@@ -1,77 +1,8 @@
 self.onmessage = async (e) => {
-  const { type, file, mode = 'simple' } = e.data || {};
+  const { type, file } = e.data || {};
   if (type === 'precheck') return precheck(file);
-  if (type === 'parse')    return streamOnly(file, mode);
+  if (type === 'parse')    return streamOnly(file);
 };
-
-const workerState = {
-  mode: 'simple'
-};
-const keywordSamplerState = new WeakMap();
-const KEYWORD_TOKEN_PATTERN = /[\p{Letter}\p{Number}][\p{Letter}\p{Number}\-_'’]*/gu;
-
-function safeFeedKeywords(visibleText, mode, agg){
-  try{
-    if(!visibleText || typeof visibleText !== 'string') return;
-    if(typeof feedKeywords === 'function'){
-      feedKeywords(visibleText, mode, agg);
-    }
-  }catch(err){
-    if(agg && typeof agg === 'object'){
-      agg.debug = agg.debug || {};
-      agg.debug.kwErrors = (agg.debug.kwErrors || 0) + 1;
-    }
-  }
-}
-
-function feedKeywords(visibleText, mode, agg){
-  if(!agg || typeof agg !== 'object') return;
-  if(typeof visibleText !== 'string' || !visibleText) return;
-  if(!Array.isArray(agg.keywords)){
-    agg.keywords = [];
-  }
-
-  let state = keywordSamplerState.get(agg);
-  if(!state || state.mode !== mode){
-    state = { mode, counts: new Map() };
-    keywordSamplerState.set(agg, state);
-    agg.keywords = [];
-  }
-
-  const tokens = tokenize(visibleText, mode);
-  if(tokens.length === 0) return;
-
-  const stoplist = getStoplist();
-  const minLength = mode === 'simple' ? 3 : 2;
-  let changed = false;
-
-  for(const token of tokens){
-    if(token.length < minLength) continue;
-    if(stoplist.has(token)) continue;
-    if(/^[\d_\-]+$/.test(token)) continue;
-    const nextCount = (state.counts.get(token) || 0) + 1;
-    state.counts.set(token, nextCount);
-    changed = true;
-  }
-
-  if(!changed) return;
-
-  agg.keywords = sortKeywordCounts(state.counts).slice(0, 200);
-}
-
-function safeFeedKeywords(visibleText, mode, agg){
-  try{
-    if(!visibleText || typeof visibleText !== 'string') return;
-    if(typeof feedKeywords === 'function'){
-      feedKeywords(visibleText, mode, agg);
-    }
-  }catch(err){
-    if(agg && typeof agg === 'object'){
-      agg.debug = agg.debug || {};
-      agg.debug.kwErrors = (agg.debug.kwErrors || 0) + 1;
-    }
-  }
-}
 
 async function precheck(file){
   try{
@@ -85,16 +16,30 @@ async function precheck(file){
   }
 }
 
-async function streamOnly(file, mode){
+async function streamOnly(file){
+  let reader;
+  let summary = null;
+  let errorPosted = false;
+  const startTime = performance.now();
   try{
-    workerState.mode = mode || 'simple';
-    const reader = file.stream().getReader();
+    reader = file.stream().getReader();
     const td = new TextDecoder();
     const chunks = [];
-    let loaded = 0, lastTick = 0, done = false;
+    let loaded = 0;
+    let lastTick = 0;
+    let done = false;
+    let readError = null;
 
     while(!done){
-      const { value, done: d } = await reader.read();
+      let readResult;
+      try{
+        readResult = await reader.read();
+      }catch(loopErr){
+        readError = loopErr;
+        break;
+      }
+
+      const { value, done: d } = readResult;
       done = d;
       if (value){
         const text = td.decode(value, {stream:true});
@@ -114,24 +59,32 @@ async function streamOnly(file, mode){
       }
     }
 
-    const flush = td.decode();
-    if(flush){ chunks.push(flush); }
+    if(readError){
+      errorPosted = true;
+      postMessage({ type:'error', message:String(readError?.message||readError) });
+    }else{
+      const flush = td.decode();
+      if(flush){ chunks.push(flush); }
 
-    const text = chunks.join('');
-    const raw = JSON.parse(text);
-    const summary = summarizeFile(raw, { fileSize: file.size });
-    if(!Array.isArray(summary.keywords)){
-      summary.keywords = [];
+      const text = chunks.join('');
+      const raw = JSON.parse(text);
+      const parseDurationMs = performance.now() - startTime;
+      summary = summarizeFile(raw, { fileSize: file.size, parseDurationMs });
     }
-
-    postMessage({ type:'done', summary });
   }catch(err){
-    postMessage({ type:'error', message:String(err?.message||err) });
+    if(!errorPosted){
+      postMessage({ type:'error', message:String(err?.message||err) });
+      errorPosted = true;
+    }
+  }finally{
+    try{
+      reader?.releaseLock?.();
+    }catch(_err){ /* ignore */ }
+    postMessage({ type:'done', summary });
   }
 }
 
-function summarizeFile(raw, {fileSize}){
-  const mode = workerState.mode || 'simple';
+function summarizeFile(raw, {fileSize, parseDurationMs}){
   const summary = {
     totalChars:{user:0,assistant:0},
     totalMsgs:{user:0,assistant:0},
@@ -139,61 +92,30 @@ function summarizeFile(raw, {fileSize}){
     timeOfDay:new Array(8).fill(0),
     dayActive:[],
     monthDailyChars:{},
-    keywords:[],
-    samplingNote: fileSize > 50*1024*1024,
-    mode,
-    debug:{
-      detectedForm:'unknown',
-      seenMessages:0,
-      countedUser:0,
-      countedAssistant:0,
-      skippedByRole:0,
-      skippedByNoTime:0,
-      kw:{
-        msgsInWindow:0,
-        textsBytes:0,
-        tokensKept:0,
-        topSample:[]
-      },
-      recentWindow:{ startLocal:'', endLocal:'' }
-    }
+    samplingNote:false
   };
-  summary.debug.timeOfDayBasis = 'UTC';
 
   const counted = new WeakSet();
   const daySet = new Set();
-  const kwWindow = computeRecentWindowBounds();
-  summary.debug.recentWindow = { startLocal: kwWindow.startLocal, endLocal: kwWindow.endLocal };
-  const keywordCounter = createKeywordCounter({
-    mode,
-    windowStart: kwWindow.startMs,
-    windowEnd: kwWindow.endMs,
-    debug: summary.debug.kw
-  });
+  const monthDailyCounts = new Map();
 
   const handleMessage = (msg)=>{
     if(!msg || typeof msg !== 'object') return false;
     if(counted.has(msg)) return false;
     counted.add(msg);
-    summary.debug.seenMessages += 1;
 
     const role = normalizeRole(msg);
     if(!role){
-      summary.debug.skippedByRole += 1;
       return true;
     }
 
     const visibleText = extractContent(msg);
     const ts = extractTimestamp(msg);
-    if(ts == null){
-      summary.debug.skippedByNoTime += 1;
-    }
 
     if(role === 'user' || role === 'assistant'){
       const bucket = role === 'user' ? 'user' : 'assistant';
       summary.totalMsgs[bucket] += 1;
       summary.totalChars[bucket] += visibleText.length;
-      if(role === 'user') summary.debug.countedUser += 1; else summary.debug.countedAssistant += 1;
 
       if(ts != null){
         if(summary.earliestTs == null || ts < summary.earliestTs){
@@ -202,34 +124,18 @@ function summarizeFile(raw, {fileSize}){
         const date = new Date(ts);
         const slot = Math.min(7, Math.max(0, Math.floor(date.getUTCHours() / 3)));
         summary.timeOfDay[slot] = (summary.timeOfDay[slot] ?? 0) + 1;
-        const dayKey = date.toISOString().slice(0,10);
+        const dayKey = formatLocalDate(date);
         daySet.add(dayKey);
-        summary.monthDailyChars[dayKey] = (summary.monthDailyChars[dayKey] || 0) + visibleText.length;
+        const existing = monthDailyCounts.get(dayKey) || 0;
+        monthDailyCounts.set(dayKey, existing + visibleText.length);
       }
-
-      const inWindow = ts != null
-        && (kwWindow.startMs == null || ts >= kwWindow.startMs)
-        && (kwWindow.endMs == null || ts <= kwWindow.endMs);
-      if(inWindow && visibleText){
-        safeFeedKeywords(visibleText, mode, summary);
-      }
-
-      keywordCounter.feed(visibleText, ts);
     }
     return true;
   };
 
   const processNode = (node)=>{
-    const mapped = parseMapping(node, handleMessage);
-    if(mapped && summary.debug.detectedForm === 'unknown'){
-      summary.debug.detectedForm = 'mapping';
-    }
-
-    const messaged = parseMessagesArray(node, handleMessage);
-    if(!mapped && summary.debug.detectedForm === 'unknown' && messaged){
-      summary.debug.detectedForm = 'messages';
-    }
-
+    parseMapping(node, handleMessage);
+    parseMessagesArray(node, handleMessage);
     fallbackScan(node, handleMessage);
   };
 
@@ -242,20 +148,47 @@ function summarizeFile(raw, {fileSize}){
   }
 
   summary.dayActive = Array.from(daySet).sort();
-  summary.keywords = keywordCounter.finalize();
+
+  const monthWindow = computeMonthWindowBounds();
+  const samplingBySize = fileSize > 50*1024*1024;
+  const samplingByTime = typeof parseDurationMs === 'number' && parseDurationMs > 5000;
+  summary.samplingNote = samplingBySize || samplingByTime;
+
+  const monthDailyEntries = Array.from(monthDailyCounts.entries());
+  if(summary.samplingNote){
+    const filtered = {};
+    for (const [dayKey, count] of monthDailyEntries){
+      if(isWithinMonthWindow(dayKey, monthWindow.allowedMonths)){
+        filtered[dayKey] = count;
+      }
+    }
+    summary.monthDailyChars = filtered;
+  }else{
+    const full = {};
+    for (const [dayKey, count] of monthDailyEntries){
+      full[dayKey] = count;
+    }
+    summary.monthDailyChars = full;
+  }
+
   return summary;
 }
 
-function computeRecentWindowBounds(){
+function computeMonthWindowBounds(){
   const now = new Date();
-  const endDay = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 23, 59, 59, 999);
-  const start = new Date(now.getFullYear(), now.getMonth() - 2, 1);
-  return {
-    startMs: start.getTime(),
-    endMs: endDay.getTime(),
-    startLocal: formatLocalDate(start),
-    endLocal: formatLocalDate(endDay)
-  };
+  const allowedMonths = new Set();
+  for(let offset = 0; offset < 3; offset += 1){
+    const point = new Date(now.getFullYear(), now.getMonth() - offset, 1);
+    const key = `${point.getFullYear()}-${String(point.getMonth() + 1).padStart(2, '0')}`;
+    allowedMonths.add(key);
+  }
+  return { allowedMonths };
+}
+
+function isWithinMonthWindow(dayKey, allowedMonths){
+  if(!dayKey) return false;
+  const monthKey = dayKey.slice(0, 7);
+  return allowedMonths.has(monthKey);
 }
 
 function formatLocalDate(date){
@@ -263,66 +196,6 @@ function formatLocalDate(date){
   const m = String(date.getMonth() + 1).padStart(2, '0');
   const d = String(date.getDate()).padStart(2, '0');
   return `${y}-${m}-${d}`;
-}
-
-function createKeywordCounter({ mode = 'simple', windowStart, windowEnd, debug }){
-  const counts = new Map();
-  const encoder = new TextEncoder();
-  const stoplist = getStoplist();
-  const minLength = mode === 'simple' ? 3 : 2;
-
-  return {
-    feed(visibleText, ts){
-      if(!visibleText || typeof visibleText !== 'string') return;
-      if(ts == null || (windowStart != null && ts < windowStart) || (windowEnd != null && ts > windowEnd)) return;
-
-      debug.msgsInWindow += 1;
-      debug.textsBytes += encoder.encode(visibleText).length;
-
-      const tokens = tokenize(visibleText, mode);
-      for(const token of tokens){
-        if(!token) continue;
-        if(token.length < minLength) continue;
-        if(stoplist.has(token)) continue;
-        if(/^[\d_\-]+$/.test(token)) continue;
-        const nextCount = (counts.get(token) || 0) + 1;
-        counts.set(token, nextCount);
-        debug.tokensKept += 1;
-      }
-    },
-    finalize(){
-      const sorted = sortKeywordCounts(counts);
-      debug.topSample = sorted.slice(0, 5).map(({term, count})=>({term, count}));
-      return sorted.slice(0, 200);
-    }
-  };
-}
-
-function tokenize(s, mode){
-  if(typeof s !== 'string' || !s) return [];
-  const lower = s.toLowerCase();
-  const matches = lower.match(KEYWORD_TOKEN_PATTERN);
-  if(!matches){ return []; }
-  return matches.map(token=>token.trim()).filter(Boolean);
-}
-
-function sortKeywordCounts(counts){
-  return Array.from(counts.entries())
-    .map(([term, count])=>({ term, count }))
-    .sort((a, b)=>{
-      if(b.count !== a.count) return b.count - a.count;
-      return a.term.localeCompare(b.term);
-    });
-}
-
-function getStoplist(){
-  if(getStoplist.cache){ return getStoplist.cache; }
-  const words = [
-    'the','and','for','you','that','with','this','have','from','your','about','will','just','they','what','when','where','which','their','there','would','could','should','into','while','were','them','been','than','then','because','these','those','here','http','https','www','com','html','true','false','null','okay','thanks','thank','please','need','like','know','does','done','make','made','over','such','each','very','also','some','more','only','really','much','even','still','take','want','well','back','sure','look','said','case','used','using','under','upon','ourselves','myself','yourself','ours','mine','ourselves','himself','herself','itself','ourselves','ourselves','being','after','before','again'
-  ];
-  const set = new Set(words);
-  getStoplist.cache = set;
-  return set;
 }
 
 function parseMapping(raw, handle){
