@@ -266,6 +266,46 @@ body[data-theme="Retro"]{
   .day{ min-height:56px; }
 }
 
+/* 让每个日格按“自身宽度”自适应字号，并给左右留余量 */
+.day{
+  container-type: inline-size;     /* 启用 cqw 容器单位 */
+  padding: 6px 12px;               /* 右侧多留点空间 */
+  box-sizing: border-box;
+  overflow: hidden;
+}
+
+/* 顶部日期与底部字数都占满一行、居中显示 */
+.day .d,
+.day .cnt{
+  display: block;
+  max-width: 100%;
+  text-align: center;              /* 居中可避免右侧贴边 */
+}
+
+/* 自适应字号：随方块宽度缩放，桌面回到原大小 */
+.day .d{
+  font-weight: 700; line-height: 1.15;
+  font-size: clamp(12px, 15cqw, 14px);
+}
+.day .cnt{
+  line-height: 1.1;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -0.15px;
+  font-size: clamp(10px, 11.5cqw, 12px); /* 比之前再收一点 */
+}
+
+/* 极窄屏再降一点体量（根据你机器可微调） */
+@media (max-width: 420px){
+  .month-grid{ gap: 6px; padding: 0 6px; }
+  .day{ min-height: 56px; }
+  .day .cnt{ font-size: clamp(10px, 10.5cqw, 12px); }
+}
+
+/* 高光方块也同步规则（可选） */
+.hl-tile{ padding: 6px 12px; }
+.hl-date{ text-align:center; font-size: clamp(12px, 15cqw, 14px); }
+.hl-chars{ text-align:center; font-size: clamp(10px, 11.5cqw, 12px); }
+
 </style>
 
 </head>
