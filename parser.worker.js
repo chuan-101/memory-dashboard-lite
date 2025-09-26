@@ -8,6 +8,20 @@ const workerState = {
   mode: 'simple'
 };
 
+function safeFeedKeywords(visibleText, mode, agg){
+  try{
+    if(!visibleText || typeof visibleText !== 'string') return;
+    if(typeof feedKeywords === 'function'){
+      feedKeywords(visibleText, mode, agg);
+    }
+  }catch(err){
+    if(agg && typeof agg === 'object'){
+      agg.debug = agg.debug || {};
+      agg.debug.kwErrors = (agg.debug.kwErrors || 0) + 1;
+    }
+  }
+}
+
 async function precheck(file){
   try{
     const chunk = await file.slice(0, 1024 * 1024).text();
@@ -55,6 +69,9 @@ async function streamOnly(file, mode){
     const text = chunks.join('');
     const raw = JSON.parse(text);
     const summary = summarizeFile(raw, { fileSize: file.size });
+    if(!Array.isArray(summary.keywords)){
+      summary.keywords = [];
+    }
 
     postMessage({ type:'done', summary });
   }catch(err){
@@ -143,10 +160,10 @@ function summarizeFile(raw, {fileSize}){
         && (kwWindow.startMs == null || ts >= kwWindow.startMs)
         && (kwWindow.endMs == null || ts <= kwWindow.endMs);
       if(inWindow && visibleText){
-        feedKeywords(visibleText, mode);
+        safeFeedKeywords(visibleText, mode, summary);
       }
 
-      keywordCounter.feed(text, ts);
+      keywordCounter.feed(visibleText, ts);
     }
     return true;
   };
