@@ -4,6 +4,10 @@ self.onmessage = async (e) => {
   if (type === 'parse')    return streamOnly(file, mode);
 };
 
+const workerState = {
+  mode: 'simple'
+};
+
 async function precheck(file){
   try{
     const chunk = await file.slice(0, 1024 * 1024).text();
@@ -18,6 +22,7 @@ async function precheck(file){
 
 async function streamOnly(file, mode){
   try{
+    workerState.mode = mode || 'simple';
     const reader = file.stream().getReader();
     const td = new TextDecoder();
     const chunks = [];
@@ -49,7 +54,7 @@ async function streamOnly(file, mode){
 
     const text = chunks.join('');
     const raw = JSON.parse(text);
-    const summary = summarizeFile(raw, { fileSize: file.size, mode });
+    const summary = summarizeFile(raw, { fileSize: file.size });
 
     postMessage({ type:'done', summary });
   }catch(err){
@@ -57,7 +62,8 @@ async function streamOnly(file, mode){
   }
 }
 
-function summarizeFile(raw, {fileSize, mode}){
+function summarizeFile(raw, {fileSize}){
+  const mode = workerState.mode || 'simple';
   const summary = {
     totalChars:{user:0,assistant:0},
     totalMsgs:{user:0,assistant:0},
@@ -109,7 +115,7 @@ function summarizeFile(raw, {fileSize, mode}){
       return true;
     }
 
-    const text = extractContent(msg);
+    const visibleText = extractContent(msg);
     const ts = extractTimestamp(msg);
     if(ts == null){
       summary.debug.skippedByNoTime += 1;
@@ -118,7 +124,7 @@ function summarizeFile(raw, {fileSize, mode}){
     if(role === 'user' || role === 'assistant'){
       const bucket = role === 'user' ? 'user' : 'assistant';
       summary.totalMsgs[bucket] += 1;
-      summary.totalChars[bucket] += text.length;
+      summary.totalChars[bucket] += visibleText.length;
       if(role === 'user') summary.debug.countedUser += 1; else summary.debug.countedAssistant += 1;
 
       if(ts != null){
@@ -130,7 +136,14 @@ function summarizeFile(raw, {fileSize, mode}){
         summary.timeOfDay[slot] = (summary.timeOfDay[slot] ?? 0) + 1;
         const dayKey = date.toISOString().slice(0,10);
         daySet.add(dayKey);
-        summary.monthDailyChars[dayKey] = (summary.monthDailyChars[dayKey] || 0) + text.length;
+        summary.monthDailyChars[dayKey] = (summary.monthDailyChars[dayKey] || 0) + visibleText.length;
+      }
+
+      const inWindow = ts != null
+        && (kwWindow.startMs == null || ts >= kwWindow.startMs)
+        && (kwWindow.endMs == null || ts <= kwWindow.endMs);
+      if(inWindow && visibleText){
+        feedKeywords(visibleText, mode);
       }
 
       keywordCounter.feed(text, ts);
