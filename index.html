@@ -186,6 +186,24 @@ body[data-theme="Retro"]{
 /* 可选：仅高亮第 1 名 */
 .hl-top1{ background: var(--accent); color: var(--accent-contrast); }
 
+/* 1) 网格更稳：用 minmax(0,1fr) 避免 1fr + gap 的取整溢出 */
+.month-grid{
+  display:grid;
+  grid-template-columns: repeat(7, minmax(0, 1fr));
+  gap: 8px;                 /* 你的默认 gap */
+  padding: 0 8px;           /* 给左右留内边距，避免贴边感 */
+  box-sizing: border-box;
+}
+
+/* 2) 卡片裁剪圆角，防止网格在极小屏时“探出”卡片外沿 */
+.card{ overflow: hidden; }
+
+/* 3) 极窄屏下略收紧：减少 gap 与格子体量，防止换行溢出 */
+@media (max-width: 420px){
+  .month-grid{ gap: 6px; padding: 0 6px; }
+  .day{ min-height: 56px; padding: 6px; } /* 和你现有月历节奏一致即可 */
+}
+
 </style>
 
 </head>
