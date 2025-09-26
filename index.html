@@ -156,6 +156,26 @@ body[data-theme="Emotion"]{
 .hl-top1{ background: var(--accent); color: var(--accent-contrast); }
 .hl-top2, .hl-top3{ box-shadow: 0 0 0 9999px rgba(0,0,0,0) inset; }
 
+/* —— Compact highlight grid —— */
+.hl-grid{
+  display:grid;
+  grid-template-columns: repeat(5, minmax(0,1fr));
+  gap:10px;
+  margin-top:8px;
+}
+.hl-tile{
+  background: var(--surface);
+  border-radius: var(--radius);
+  padding: 4px 6px;
+  aspect-ratio: 1 / 1;
+  display:flex; flex-direction:column;
+  justify-content:space-between; align-items:flex-start;
+  font-variant-numeric: tabular-nums;
+}
+.hl-date{ font-weight:700; line-height:1.2; opacity:.95; }
+.hl-chars{ font-size:12px; opacity:.95; }
+.hl-top1{ background: var(--accent); color: var(--accent-contrast); }
+
 </style>
 
 </head>
