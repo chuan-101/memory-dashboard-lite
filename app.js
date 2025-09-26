@@ -573,8 +573,8 @@ function renderHighlights(summary){
     return a.date.localeCompare(b.date);
   });
 
-  const top10 = items.slice(0, 10);
-  if(top10.length === 0){
+  const topTen = entries.slice(0, 10);
+  if(topTen.length === 0){
     topDaysEl.textContent = emptyText;
     return;
   }
@@ -582,9 +582,17 @@ function renderHighlights(summary){
   const fmt = new Intl.NumberFormat();
   const fragment = document.createDocumentFragment();
 
-  top10.forEach((item, idx) => {
+  topTen.forEach((item, idx) => {
     const tile = document.createElement('div');
-    tile.className = `hl-tile${idx === 0 ? ' hl-top1' : ''}`;
+    let extraClass = '';
+    if(idx === 0){
+      extraClass = ' hl-top1';
+    } else if(idx === 1){
+      extraClass = ' hl-top2';
+    } else if(idx === 2){
+      extraClass = ' hl-top3';
+    }
+    tile.className = `hl-tile${extraClass}`;
     tile.innerHTML = `<div class="hl-date">${item.date}</div><div class="hl-chars">${fmt.format(item.chars)}</div>`;
     fragment.appendChild(tile);
   });

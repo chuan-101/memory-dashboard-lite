@@ -131,35 +131,30 @@ body[data-theme="Emotion"]{
   margin-top:10px;
 }
 
-/* Highlights: 5×2 compact square tiles */
+/* Highlights tile grid */
 .hl-grid{
   display:grid;
-  grid-template-columns: repeat(5, minmax(0,1fr));
-  gap:10px;                /* fixed spacing between tiles */
-  margin-top:8px;
+  grid-template-columns: repeat(5, minmax(0,1fr)); /* desktop */
+  gap:10px;
 }
+@media (max-width:1024px){ .hl-grid{ grid-template-columns: repeat(4,1fr); } }
+@media (max-width:860px){  .hl-grid{ grid-template-columns: repeat(3,1fr); } }
+@media (max-width:560px){  .hl-grid{ grid-template-columns: repeat(2,1fr); } }
+
 .hl-tile{
   background: var(--surface);
   border-radius: var(--radius);
-  padding: 6px 8px;
-  aspect-ratio: 1 / 1;     /* square */
-  display:flex;
-  flex-direction:column;
-  justify-content:space-between;
-  align-items:flex-start;
+  min-height: 70px;
+  padding: 8px 10px;
+  display:flex; flex-direction:column; justify-content:space-between; align-items:flex-start;
   font-variant-numeric: tabular-nums;
-  min-height:0;            /* prevent unexpected growth */
 }
-.hl-date{ font-weight:700; opacity:.95; line-height:1.2; }
+.hl-date{ font-weight:700; opacity:.95; }
 .hl-chars{ font-size:12px; opacity:.95; }
 
-/* Optional: highlight Top 1 */
+/* Optional: stronger accent for Top 3 */
 .hl-top1{ background: var(--accent); color: var(--accent-contrast); }
-
-/* (Optional responsive fallback for very narrow screens)
-@media (max-width:640px){ .hl-grid{ grid-template-columns: repeat(3,1fr); } }
-@media (max-width:480px){ .hl-grid{ grid-template-columns: repeat(2,1fr); } }
-*/
+.hl-top2, .hl-top3{ box-shadow: 0 0 0 9999px rgba(0,0,0,0) inset; }
 
 </style>
 
@@ -253,9 +248,9 @@ body[data-theme="Emotion"]{
 
   <div class="card" id="highlights">
     <div class="h2">高光（最近三个月）</div>
-    <div id="hlTopDays" class="hl-grid"></div>
+    <div id="hlTopDays" class="hl-list"></div>
   </div>
 
-  <script type="module" src="./app.js?v=38"></script>
+  <script type="module" src="./app.js?v=36"></script>
 </body>
 </html>
