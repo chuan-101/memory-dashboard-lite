@@ -4,6 +4,10 @@ self.onmessage = async (e) => {
   if (type === 'parse')    return streamOnly(file, mode);
 };
 
+const workerState = {
+  mode: 'simple'
+};
+
 async function precheck(file){
   try{
     const chunk = await file.slice(0, 1024 * 1024).text();
@@ -18,6 +22,7 @@ async function precheck(file){
 
 async function streamOnly(file, mode){
   try{
+    workerState.mode = mode || 'simple';
     const reader = file.stream().getReader();
     const td = new TextDecoder();
     const chunks = [];
@@ -49,7 +54,7 @@ async function streamOnly(file, mode){
 
     const text = chunks.join('');
     const raw = JSON.parse(text);
-    const summary = summarizeFile(raw, { fileSize: file.size, mode });
+    const summary = summarizeFile(raw, { fileSize: file.size });
 
     postMessage({ type:'done', summary });
   }catch(err){
@@ -57,7 +62,8 @@ async function streamOnly(file, mode){
   }
 }
 
-function summarizeFile(raw, {fileSize, mode}){
+function summarizeFile(raw, {fileSize}){
+  const mode = workerState.mode || 'simple';
   const summary = {
     totalChars:{user:0,assistant:0},
     totalMsgs:{user:0,assistant:0},
@@ -74,13 +80,27 @@ function summarizeFile(raw, {fileSize, mode}){
       countedUser:0,
       countedAssistant:0,
       skippedByRole:0,
-      skippedByNoTime:0
+      skippedByNoTime:0,
+      kw:{
+        msgsInWindow:0,
+        textsBytes:0,
+        tokensKept:0,
+        topSample:[]
+      },
+      recentWindow:{ startLocal:'', endLocal:'' }
     }
   };
   summary.debug.timeOfDayBasis = 'UTC';
 
   const counted = new WeakSet();
   const daySet = new Set();
+  const kwWindow = computeRecentWindowBounds();
+  summary.debug.recentWindow = { startLocal: kwWindow.startLocal, endLocal: kwWindow.endLocal };
+  const keywordCounter = createKeywordCounter({
+    mode,
+    debug: summary.debug.kw
+  });
+  const feedKeywords = (text)=> keywordCounter.feed(text);
 
   const handleMessage = (msg)=>{
     if(!msg || typeof msg !== 'object') return false;
@@ -94,7 +114,7 @@ function summarizeFile(raw, {fileSize, mode}){
       return true;
     }
 
-    const text = extractContent(msg);
+    const visibleText = extractContent(msg);
     const ts = extractTimestamp(msg);
     if(ts == null){
       summary.debug.skippedByNoTime += 1;
@@ -103,7 +123,7 @@ function summarizeFile(raw, {fileSize, mode}){
     if(role === 'user' || role === 'assistant'){
       const bucket = role === 'user' ? 'user' : 'assistant';
       summary.totalMsgs[bucket] += 1;
-      summary.totalChars[bucket] += text.length;
+      summary.totalChars[bucket] += visibleText.length;
       if(role === 'user') summary.debug.countedUser += 1; else summary.debug.countedAssistant += 1;
 
       if(ts != null){
@@ -115,7 +135,14 @@ function summarizeFile(raw, {fileSize, mode}){
         summary.timeOfDay[slot] = (summary.timeOfDay[slot] ?? 0) + 1;
         const dayKey = date.toISOString().slice(0,10);
         daySet.add(dayKey);
-        summary.monthDailyChars[dayKey] = (summary.monthDailyChars[dayKey] || 0) + text.length;
+        summary.monthDailyChars[dayKey] = (summary.monthDailyChars[dayKey] || 0) + visibleText.length;
+      }
+
+      const inWindow = ts != null
+        && (kwWindow.startMs == null || ts >= kwWindow.startMs)
+        && (kwWindow.endMs == null || ts <= kwWindow.endMs);
+      if(inWindow && visibleText){
+        feedKeywords(visibleText, mode);
       }
     }
     return true;
@@ -144,7 +171,81 @@ function summarizeFile(raw, {fileSize, mode}){
   }
 
   summary.dayActive = Array.from(daySet).sort();
+  summary.keywords = keywordCounter.finalize();
   return summary;
+}
+
+function computeRecentWindowBounds(){
+  const now = new Date();
+  const endDay = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 23, 59, 59, 999);
+  const start = new Date(now.getFullYear(), now.getMonth() - 2, 1);
+  return {
+    startMs: start.getTime(),
+    endMs: endDay.getTime(),
+    startLocal: formatLocalDate(start),
+    endLocal: formatLocalDate(endDay)
+  };
+}
+
+function formatLocalDate(date){
+  const y = date.getFullYear();
+  const m = String(date.getMonth() + 1).padStart(2, '0');
+  const d = String(date.getDate()).padStart(2, '0');
+  return `${y}-${m}-${d}`;
+}
+
+function createKeywordCounter({ mode = 'simple', debug }){
+  const counts = new Map();
+  const encoder = new TextEncoder();
+  const tokenPattern = /[\p{Letter}\p{Number}][\p{Letter}\p{Number}\-_'’]*/gu;
+  const stoplist = getStoplist();
+  const minLength = mode === 'simple' ? 3 : 2;
+
+  return {
+    feed(text){
+      if(!text || typeof text !== 'string') return;
+      debug.msgsInWindow += 1;
+      debug.textsBytes += encoder.encode(text).length;
+
+      const tokens = extractTokens(text, tokenPattern);
+      for(const token of tokens){
+        if(!token) continue;
+        if(token.length < minLength) continue;
+        if(stoplist.has(token)) continue;
+        if(/^[\d_\-]+$/.test(token)) continue;
+        const nextCount = (counts.get(token) || 0) + 1;
+        counts.set(token, nextCount);
+        debug.tokensKept += 1;
+      }
+    },
+    finalize(){
+      const sorted = Array.from(counts.entries())
+        .map(([term, count])=>({ term, count }))
+        .sort((a, b)=>{
+          if(b.count !== a.count) return b.count - a.count;
+          return a.term.localeCompare(b.term);
+        });
+      debug.topSample = sorted.slice(0, 5).map(({term, count})=>({term, count}));
+      return sorted.slice(0, 200);
+    }
+  };
+}
+
+function extractTokens(text, pattern){
+  const lower = text.toLowerCase();
+  const matches = lower.match(pattern);
+  if(!matches){ return []; }
+  return matches.map(t=>t.trim()).filter(Boolean);
+}
+
+function getStoplist(){
+  if(getStoplist.cache){ return getStoplist.cache; }
+  const words = [
+    'the','and','for','you','that','with','this','have','from','your','about','will','just','they','what','when','where','which','their','there','would','could','should','into','while','were','them','been','than','then','because','these','those','here','http','https','www','com','html','true','false','null','okay','thanks','thank','please','need','like','know','does','done','make','made','over','such','each','very','also','some','more','only','really','much','even','still','take','want','well','back','sure','look','said','case','used','using','under','upon','ourselves','myself','yourself','ours','mine','ourselves','himself','herself','itself','ourselves','ourselves','being','after','before','again'
+  ];
+  const set = new Set(words);
+  getStoplist.cache = set;
+  return set;
 }
 
 function parseMapping(raw, handle){
