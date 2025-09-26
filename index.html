@@ -107,6 +107,30 @@ body[data-theme="Logic"]{
 body[data-theme="Emotion"]{
   --bg:#eeeaeb; --card:#f4d0e2; --surface:#e696bf; --accent:#505050; --accent-contrast:#fff; --text:#1a1a1a;
 }
+
+/* 顶部两行的小调整 —— 统一字号/字重 + 行距 + 主题行左对齐 */
+.row label{ 
+  font-weight:700; 
+  font-size:14px; 
+}
+
+/* 让“主题”两字和上面 label 一致，不要半透明 */
+.theme-row .muted{
+  opacity:1;
+  font-weight:700;
+  font-size:14px;
+  margin-right:8px;    /* 与按钮留一点距离 */
+  line-height:1.2;
+}
+
+/* 行间距：两行别贴太近 */
+.card > .row{ margin:6px 0; }
+.theme-row{ 
+  justify-content:flex-start;   /* 主题行左对齐 */
+  gap:8px; 
+  margin-top:10px; 
+}
+  
 </style>
 
 </head>
