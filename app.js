@@ -9,11 +9,19 @@ const state = {
   lastSummary: null
 };
 
+function safe(fn){
+  try {
+    fn();
+  } catch (err) {
+    console.error(err);
+  }
+}
+
 function spawnWorker(){
   if(state.worker){
     state.worker.terminate();
   }
-  state.worker = new Worker('./parser.worker.js?v=38', { type: 'module' });
+  state.worker = new Worker('./parser.worker.js?v=40', { type: 'module' });
   state.worker.onmessage = onWorkerMessage;
 }
 
@@ -43,8 +51,6 @@ const overviewMetrics = {
 const timeMetrics = setupTimeElements();
 const streakMetrics = setupStreakElements();
 const highlights = setupHighlightElements();
-
-renderHighlights();
 
 // —— 读取与应用偏好
 function loadPrefs(){
@@ -179,14 +185,14 @@ function onWorkerMessage(e){
     if(typeof window !== 'undefined'){
       window.lastSummary = summary;
     }
-    renderSummaryBasics(summary);
+    safe(()=>renderSummaryBasics(summary));
     let statusText = '解析完成';
     if(summary?.samplingNote === true){
       statusText += '（性能保护：基于抽样）';
     }
     $('#status').textContent = statusText;
-    renderMonthlyTiles(summary);
-    renderHighlights();
+    safe(()=>renderMonthlyTiles(summary));
+    safe(()=>renderHighlights(summary));
     setParsingState(false);
   } else if(type==='error'){
     $('#status').textContent = data.message || '未知错误';
@@ -544,58 +550,40 @@ function renderMonthlyTiles(summary){
   container.appendChild(fragment);
 }
 
-function renderHighlights(){
-  const grid = document.querySelector('#hlTopDays');
-  if(!grid){ return; }
+function renderHighlights(s){
+  try {
+    const grid = document.querySelector('#hlTopDays');
+    if(!grid) return;
 
-  const emptyText = '最近三个月没有可显示的活跃日。';
-  const monthDailyChars = summary?.monthDailyChars;
-  topDaysEl.innerHTML = '';
-
-  if(!monthDailyChars || Object.keys(monthDailyChars).length === 0){
-    topDaysEl.textContent = emptyText;
-    return;
-  }
-
-  const items = Object.entries(monthDailyChars)
-    .map(([date, chars]) => ({ date, chars: Number(chars) }))
-    .filter(item => Number.isFinite(item.chars));
-
-  if(items.length === 0){
-    topDaysEl.textContent = emptyText;
-    return;
-  }
-
-  items.sort((a, b) => {
-    if(b.chars !== a.chars){
-      return b.chars - a.chars;
+    const win = typeof window !== 'undefined' ? window : null;
+    const sum = s || (win?.state && win.state.lastSummary) || win?.lastSummary || null;
+    if(!sum || !sum.monthDailyChars){
+      grid.textContent = '最近三个月没有可显示的活跃日。';
+      return;
     }
-    return a.date.localeCompare(b.date);
-  });
 
-  const topTen = entries.slice(0, 10);
-  if(topTen.length === 0){
-    topDaysEl.textContent = emptyText;
-    return;
-  }
+    const items = Object.entries(sum.monthDailyChars).map(([date, chars]) => ({
+      date,
+      chars: Number(chars) || 0
+    }));
+    items.sort((a, b) => (b.chars - a.chars) || (a.date > b.date ? 1 : -1));
+    const top10 = items.slice(0, 10);
 
-  const fmt = new Intl.NumberFormat();
-  const fragment = document.createDocumentFragment();
-
-  topTen.forEach((item, idx) => {
-    const tile = document.createElement('div');
-    let extraClass = '';
-    if(idx === 0){
-      extraClass = ' hl-top1';
-    } else if(idx === 1){
-      extraClass = ' hl-top2';
-    } else if(idx === 2){
-      extraClass = ' hl-top3';
+    grid.innerHTML = '';
+    if(top10.length === 0){
+      grid.textContent = '最近三个月没有可显示的活跃日。';
+      return;
     }
-    tile.className = `hl-tile${extraClass}`;
-    tile.innerHTML = `<div class="hl-date">${item.date}</div><div class="hl-chars">${fmt.format(item.chars)}</div>`;
-    fragment.appendChild(tile);
-  });
-
-  topDaysEl.appendChild(fragment);
+    const fmt = new Intl.NumberFormat();
+    top10.forEach((it, idx) => {
+      const tile = document.createElement('div');
+      tile.className = 'hl-tile' + (idx === 0 ? ' hl-top1' : '');
+      tile.innerHTML = `<div class="hl-date">${it.date}</div><div class="hl-chars">${fmt.format(it.chars)}</div>`;
+      grid.appendChild(tile);
+    });
+  } catch (e) {
+    console.error('[Highlights] render failed:', e);
+    const grid = document.querySelector('#hlTopDays');
+    if(grid) grid.textContent = '高光渲染失败（已忽略）';
+  }
 }
