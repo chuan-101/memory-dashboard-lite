@@ -6,7 +6,8 @@ let currentNames = {user: defaults.user, asst: defaults.asst};
 
 const state = {
   file: null,
-  worker: null
+  worker: null,
+  parseDebounceTimer: null
 };
 
 const downloadButton = $('#downloadCsv');
@@ -25,6 +26,7 @@ function startParse(){
     $('#status').textContent = 'Please choose a JSON file first';
     return;
   }
+  clearParseDebounce();
   $('#status').textContent = 'Parsing…';
   spawnWorker();
   if(state.worker){
@@ -35,7 +37,34 @@ function startParse(){
 }
 
 function setParsingState(isParsing){
-  document.body?.classList.toggle('is-parsing', Boolean(isParsing));
+  const active = Boolean(isParsing);
+  document.body?.classList.toggle('is-parsing', active);
+  setCancelEnabled(active);
+  if(!active){
+    clearParseDebounce();
+  }
+}
+
+if(downloadButton){
+  downloadButton.addEventListener('click', onDownloadCsv);
+  setDownloadEnabled(Boolean(lastSummary));
+}
+
+if(cancelButton){
+  cancelButton.addEventListener('click', onCancelParse);
+  setCancelEnabled(false);
+}
+
+function setDownloadEnabled(canDownload){
+  if(downloadButton){
+    downloadButton.disabled = !canDownload;
+  }
+}
+
+function setCancelEnabled(isEnabled){
+  if(cancelButton){
+    cancelButton.disabled = !isEnabled;
+  }
 }
 
 if(downloadButton){
@@ -195,11 +224,26 @@ function onWorkerMessage(e){
     $('#status').textContent = statusText;
     renderMonthlyTiles(summary);
     setParsingState(false);
+    if(state.worker){
+      state.worker.terminate();
+      state.worker = null;
+    }
   } else if(type==='error'){
     $('#status').textContent = data.message || '未知错误';
     setParsingState(false);
     setDownloadEnabled(Boolean(lastSummary));
   }
+}
+
+function onCancelParse(){
+  if(state.worker){
+    state.worker.terminate();
+  }
+  state.worker = null;
+  clearParseDebounce();
+  $('#status').textContent = 'Canceled.';
+  setDownloadEnabled(Boolean(lastSummary));
+  setParsingState(false);
 }
 
 function clampPct(pct){
@@ -398,6 +442,13 @@ function formatHourMinute(totalMinutes){
   const hours = Math.floor(normalized / 60);
   const minutes = normalized % 60;
   return `${hours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')}`;
+}
+
+function clearParseDebounce(){
+  if(state.parseDebounceTimer){
+    clearTimeout(state.parseDebounceTimer);
+    state.parseDebounceTimer = null;
+  }
 }
 
 function calcStreaks(dayActive){
