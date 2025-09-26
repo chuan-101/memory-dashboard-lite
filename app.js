@@ -81,6 +81,8 @@ function setDownloadEnabled(canDownload){
   }
 }
 
+setParsingState(false);
+
 const nameUserEl = $('#nameU');
 const nameAssistantEl = $('#nameA');
 const overviewMetrics = {
@@ -224,7 +226,7 @@ function onWorkerMessage(e){
     }
   } else if(type==='done'){
     const {summary = null} = data;
-    lastSummary = summary;
+    state.lastSummary = summary;
     if(typeof window !== 'undefined'){
       window.lastSummary = summary;
     }
@@ -238,6 +240,9 @@ function onWorkerMessage(e){
       els.status.textContent = statusText;
     }
     renderMonthlyTiles(summary);
+    if(els.status){
+      els.status.textContent = summary?.samplingNote ? '解析完成（性能保护：基于抽样）' : '解析完成';
+    }
     setParsingState(false);
     if(state.worker){
       state.worker.terminate();
@@ -250,6 +255,7 @@ function onWorkerMessage(e){
     setParsingState(false);
     setDownloadEnabled(Boolean(lastSummary));
   }
+  setParsingState(false);
 }
 
 function onCancelParse(){
