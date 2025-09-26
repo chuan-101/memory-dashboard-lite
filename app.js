@@ -44,7 +44,7 @@ const timeMetrics = setupTimeElements();
 const streakMetrics = setupStreakElements();
 const highlights = setupHighlightElements();
 
-renderHighlights(null);
+renderHighlights();
 
 // —— 读取与应用偏好
 function loadPrefs(){
@@ -186,7 +186,7 @@ function onWorkerMessage(e){
     }
     $('#status').textContent = statusText;
     renderMonthlyTiles(summary);
-    renderHighlights(summary);
+    renderHighlights();
     setParsingState(false);
   } else if(type==='error'){
     $('#status').textContent = data.message || '未知错误';
@@ -544,9 +544,9 @@ function renderMonthlyTiles(summary){
   container.appendChild(fragment);
 }
 
-function renderHighlights(summary){
-  const topDaysEl = highlights?.topDays;
-  if(!topDaysEl){ return; }
+function renderHighlights(){
+  const grid = document.querySelector('#hlTopDays');
+  if(!grid){ return; }
 
   const emptyText = '最近三个月没有可显示的活跃日。';
   const monthDailyChars = summary?.monthDailyChars;
