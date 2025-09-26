@@ -6,8 +6,7 @@ const numberFormatter = new Intl.NumberFormat();
 const state = {
   file: null,
   worker: null,
-  lastSummary: null,
-  names: {user: defaults.user, asst: defaults.asst}
+  lastSummary: null
 };
 
 function spawnWorker(){
@@ -63,10 +62,8 @@ function applyNames(p){
   if(nameAssistantEl){ nameAssistantEl.textContent = p.asst; }
   $('#nameU2').textContent = p.user; $('#nameA2').textContent = p.asst;
   $('#userName').value = p.user; $('#assistantName').value = p.asst;
-  state.names = {user: p.user, asst: p.asst};
   if(state.lastSummary){
     renderSummaryBasics(state.lastSummary);
-    renderHighlights(state.lastSummary);
   }
 }
 function applyTheme(theme){
@@ -550,10 +547,7 @@ function renderMonthlyTiles(summary){
 
 function renderHighlights(summary){
   const topDaysEl = highlights?.topDays;
-  const ratiosEl = highlights?.ratios;
   if(!topDaysEl){ return; }
-
-  renderHighlightRatios(summary, ratiosEl);
 
   const emptyText = 'No activity in the recent 3-month window.';
   const monthDailyChars = summary?.monthDailyChars;
@@ -605,66 +599,4 @@ function renderHighlights(summary){
 
   topDaysEl.innerHTML = '';
   topDaysEl.appendChild(fragment);
-}
-
-function renderHighlightRatios(summary, target){
-  if(!target){ return; }
-  if(!summary){
-    target.textContent = '';
-    return;
-  }
-
-  const names = state.names || defaults;
-
-  const totals = {
-    msgs: {
-      user: Number(summary?.totalMsgs?.user ?? 0),
-      assistant: Number(summary?.totalMsgs?.assistant ?? 0)
-    },
-    chars: {
-      user: Number(summary?.totalChars?.user ?? 0),
-      assistant: Number(summary?.totalChars?.assistant ?? 0)
-    }
-  };
-
-  const msgTotal = totals.msgs.user + totals.msgs.assistant;
-  const charTotal = totals.chars.user + totals.chars.assistant;
-
-  const ratioList = document.createElement('div');
-  ratioList.className = 'hl-list';
-
-  const msgRow = document.createElement('div');
-  msgRow.className = 'hl-item';
-  const msgLabel = document.createElement('span');
-  msgLabel.className = 'hl-date';
-  msgLabel.textContent = `Msgs — ${names.user} ${formatPercent(totals.msgs.user, msgTotal)}% · ${names.asst} ${formatPercent(totals.msgs.assistant, msgTotal)}%`;
-  const msgValue = document.createElement('span');
-  msgValue.className = 'hl-val';
-  msgValue.textContent = `(U: ${numberFormatter.format(totals.msgs.user)}, A: ${numberFormatter.format(totals.msgs.assistant)})`;
-  msgRow.appendChild(msgLabel);
-  msgRow.appendChild(msgValue);
-
-  const charRow = document.createElement('div');
-  charRow.className = 'hl-item';
-  const charLabel = document.createElement('span');
-  charLabel.className = 'hl-date';
-  charLabel.textContent = `Chars — ${names.user} ${formatPercent(totals.chars.user, charTotal)}% · ${names.asst} ${formatPercent(totals.chars.assistant, charTotal)}%`;
-  const charValue = document.createElement('span');
-  charValue.className = 'hl-val';
-  charValue.textContent = `(U: ${numberFormatter.format(totals.chars.user)}, A: ${numberFormatter.format(totals.chars.assistant)})`;
-  charRow.appendChild(charLabel);
-  charRow.appendChild(charValue);
-
-  ratioList.appendChild(msgRow);
-  ratioList.appendChild(charRow);
-
-  target.innerHTML = '';
-  target.appendChild(ratioList);
-}
-
-function formatPercent(part, total){
-  if(!Number.isFinite(part) || part < 0){ return '0.0'; }
-  if(!Number.isFinite(total) || total <= 0){ return '0.0'; }
-  const pct = (part / total) * 100;
-  return pct.toFixed(1);
 }
