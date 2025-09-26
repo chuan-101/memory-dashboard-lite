@@ -106,8 +106,7 @@ function setupStreakElements(){
 
 function setupHighlightElements(){
   return {
-    topDays: $('#hlTopDays'),
-    ratios: $('#hlRatios')
+    topDays: $('#hlTopDays')
   };
 }
 
@@ -549,8 +548,10 @@ function renderHighlights(summary){
   const topDaysEl = highlights?.topDays;
   if(!topDaysEl){ return; }
 
-  const emptyText = 'No activity in the recent 3-month window.';
+  const emptyText = '最近三个月没有可显示的活跃日。';
   const monthDailyChars = summary?.monthDailyChars;
+  topDaysEl.innerHTML = '';
+
   if(!monthDailyChars || Object.keys(monthDailyChars).length === 0){
     topDaysEl.textContent = emptyText;
     return;
@@ -573,30 +574,28 @@ function renderHighlights(summary){
   });
 
   const topTen = entries.slice(0, 10);
-  if(!topTen.length){
+  if(topTen.length === 0){
     topDaysEl.textContent = emptyText;
     return;
   }
 
+  const fmt = new Intl.NumberFormat();
   const fragment = document.createDocumentFragment();
 
-  topTen.forEach(item => {
-    const row = document.createElement('div');
-    row.className = 'hl-item';
-
-    const dateSpan = document.createElement('span');
-    dateSpan.className = 'hl-date';
-    dateSpan.textContent = item.date;
-    row.appendChild(dateSpan);
-
-    const valueSpan = document.createElement('span');
-    valueSpan.className = 'hl-val';
-    valueSpan.textContent = numberFormatter.format(Math.trunc(item.chars));
-    row.appendChild(valueSpan);
-
-    fragment.appendChild(row);
+  topTen.forEach((item, idx) => {
+    const tile = document.createElement('div');
+    let extraClass = '';
+    if(idx === 0){
+      extraClass = ' hl-top1';
+    } else if(idx === 1){
+      extraClass = ' hl-top2';
+    } else if(idx === 2){
+      extraClass = ' hl-top3';
+    }
+    tile.className = `hl-tile${extraClass}`;
+    tile.innerHTML = `<div class="hl-date">${item.date}</div><div class="hl-chars">${fmt.format(item.chars)}</div>`;
+    fragment.appendChild(tile);
   });
 
-  topDaysEl.innerHTML = '';
   topDaysEl.appendChild(fragment);
 }

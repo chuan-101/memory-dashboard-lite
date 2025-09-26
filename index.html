@@ -131,10 +131,30 @@ body[data-theme="Emotion"]{
   margin-top:10px;
 }
 
-.hl-list{ display:flex; flex-direction:column; gap:6px; }
-.hl-item{ display:flex; justify-content:space-between; }
-.hl-date{ font-weight:700; }
-.hl-val{ font-variant-numeric: tabular-nums; }
+/* Highlights tile grid */
+.hl-grid{
+  display:grid;
+  grid-template-columns: repeat(5, minmax(0,1fr)); /* desktop */
+  gap:10px;
+}
+@media (max-width:1024px){ .hl-grid{ grid-template-columns: repeat(4,1fr); } }
+@media (max-width:860px){  .hl-grid{ grid-template-columns: repeat(3,1fr); } }
+@media (max-width:560px){  .hl-grid{ grid-template-columns: repeat(2,1fr); } }
+
+.hl-tile{
+  background: var(--surface);
+  border-radius: var(--radius);
+  min-height: 70px;
+  padding: 8px 10px;
+  display:flex; flex-direction:column; justify-content:space-between; align-items:flex-start;
+  font-variant-numeric: tabular-nums;
+}
+.hl-date{ font-weight:700; opacity:.95; }
+.hl-chars{ font-size:12px; opacity:.95; }
+
+/* Optional: stronger accent for Top 3 */
+.hl-top1{ background: var(--accent); color: var(--accent-contrast); }
+.hl-top2, .hl-top3{ box-shadow: 0 0 0 9999px rgba(0,0,0,0) inset; }
 
 </style>
 
@@ -227,11 +247,10 @@ body[data-theme="Emotion"]{
   </div>
 
   <div class="card" id="highlights">
-    <div class="h2">Highlights (recent 3 months)</div>
-    <div id="hlRatios"></div>
-    <div id="hlTopDays" class="hl-list"></div>
+    <div class="h2">高光（最近三个月）</div>
+    <div id="hlTopDays" class="hl-grid"></div>
   </div>
 
-  <script type="module" src="./app.js?v=35"></script>
+  <script type="module" src="./app.js?v=37"></script>
 </body>
 </html>
