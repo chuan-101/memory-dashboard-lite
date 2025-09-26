@@ -337,6 +337,35 @@ body[data-theme="Retro"]{
   .day{ min-height:54px; }
 }
 
+/* —— 月历日格：居中、等宽数字、防溢出 —— */
+.day{
+  padding: 6px 8px;
+  min-height: 56px;
+  box-sizing: border-box;
+  display: flex; flex-direction: column;
+  justify-content: space-between; align-items: center;
+  overflow: hidden;
+}
+.day .d,
+.day .cnt{
+  display: block; max-width: 100%;
+  text-align: center; white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0;                 /* 避免右侧被挤 */
+}
+.day .d   { font-weight: 700; line-height: 1.15; font-size: clamp(12px, 2.8vw, 14px); }
+.day .cnt { line-height: 1.1;        font-size: clamp(10px, 2.0vw, 12px); }
+
+/* —— 小屏“宽数字”专治：轻微横向压缩 + 再收一档字号 —— */
+@media (max-width: 480px){
+  .day{ padding: 6px 6px; }         /* 再挪出 2px 宽度给数字 */
+  .day .cnt{
+    font-size: clamp(9px, 1.8vw, 11px);
+    transform: scaleX(.94);         /* 仅横向压缩 6% */
+    transform-origin: center;
+  }
+}
+
 </style>
 
 </head>
