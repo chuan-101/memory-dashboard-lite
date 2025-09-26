@@ -1,40 +1,32 @@
 const $ = (s)=>document.querySelector(s);
-const LS = {user:'md_user_name', asst:'md_asst_name', filter:'md_filter_mode', theme:'md_theme'};
-const defaults = {user:'Me', asst:'GPT', filter:'simple', theme:'Echoes'};
+const LS = {user:'md_user_name', asst:'md_asst_name', theme:'md_theme'};
+const defaults = {user:'Me', asst:'GPT', theme:'Echoes'};
 let lastSummary = null;
 
 const state = {
   file: null,
-  worker: null,
-  parseDebounceTimer: null
+  worker: null
 };
-
-function clearParseDebounce(){
-  if(state.parseDebounceTimer){
-    clearTimeout(state.parseDebounceTimer);
-    state.parseDebounceTimer = null;
-  }
-}
 
 function spawnWorker(){
   if(state.worker){
     state.worker.terminate();
   }
-  state.worker = new Worker('./parser.worker.js?v=19', {type:'module'});
+  const cacheBust = `v=19&cache=${Date.now()}`;
+  state.worker = new Worker(`./parser.worker.js?${cacheBust}`, {type:'module'});
   state.worker.onmessage = onWorkerMessage;
 }
 
-function startParse(mode){
+function startParse(){
   if(!state.file){
     $('#status').textContent = 'Please choose a JSON file first';
     return;
   }
   $('#status').textContent = 'Parsing…';
-  clearParseDebounce();
   spawnWorker();
   if(state.worker){
     setParsingState(true);
-    state.worker.postMessage({type:'parse', file: state.file, mode});
+    state.worker.postMessage({type:'parse', file: state.file});
   }
 }
 
@@ -56,7 +48,6 @@ function loadPrefs(){
   return {
     user: localStorage.getItem(LS.user) || defaults.user,
     asst: localStorage.getItem(LS.asst) || defaults.asst,
-    filter: localStorage.getItem(LS.filter) || defaults.filter,
     theme: localStorage.getItem(LS.theme) || defaults.theme
   };
 }
@@ -71,10 +62,6 @@ function applyNames(p){
   if(lastSummary){
     renderSummaryBasics(lastSummary);
   }
-}
-function applyFilter(mode){
-  document.querySelectorAll('input[name="filter"]').forEach(r=>r.checked=(r.value===mode));
-  renderKeywords(lastSummary);
 }
 function applyTheme(theme){
   document.body.setAttribute('data-theme', theme);
@@ -124,7 +111,7 @@ function createStreakDetail(kpi){
 
 // —— 初始化
 const prefs = loadPrefs();
-applyNames(prefs); applyFilter(prefs.filter); applyTheme(prefs.theme);
+applyNames(prefs); applyTheme(prefs.theme);
 
 // —— 事件：名称
 $('#saveNames').onclick = ()=>{
@@ -138,17 +125,6 @@ $('#resetNames').onclick = ()=>{
   localStorage.removeItem(LS.user); localStorage.removeItem(LS.asst);
   applyNames(defaults);
 };
-
-// —— 事件：过滤模式
-document.querySelectorAll('input[name="filter"]').forEach(r=>{
-  r.onchange = ()=>{
-    const mode = r.value;
-    localStorage.setItem(LS.filter, mode);
-    applyFilter(mode);
-    clearParseDebounce();
-    state.parseDebounceTimer = setTimeout(()=> startParse(mode), 300);
-  };
-});
 
 // —— 事件：主题按钮
 document.querySelectorAll('.theme').forEach(btn=>{
@@ -167,7 +143,6 @@ $('#file').onchange = (e)=>{
 
 $('#runPrecheck').onclick = ()=>{
   if(!state.file){ $('#status').textContent = '请先选择 JSON 文件'; return; }
-  clearParseDebounce();
   $('#status').textContent = '预检中…';
   spawnWorker();
   if(state.worker){
@@ -182,18 +157,19 @@ function onWorkerMessage(e){
     const {ok, reason, hint} = data;
     $('#status').textContent = ok ? `预检通过：检测到 ChatGPT 导出结构${hint?`（${hint}）`:''}` : `预检失败：${reason || '未知原因'}`;
     if(ok){
-      const mode = localStorage.getItem(LS.filter) || defaults.filter;
-      startParse(mode);
+      startParse();
       $('#status').textContent = '预检通过，开始解析…';
     }
   } else if(type==='progress'){
     const {pct = 0, loadedBytes = 0, totalBytes = 0} = data;
     const pctText = clampPct(pct);
-    $('#status').textContent = `${pctText}% (${formatMB(loadedBytes)}/${formatMB(totalBytes)} MB)`;
+    $('#status').textContent = `Parsing… ${pctText}% (${formatMB(loadedBytes)}/${formatMB(totalBytes)} MB)`;
   } else if(type==='done'){
-    clearParseDebounce();
     const {summary = null} = data;
     lastSummary = summary;
+    if(typeof window !== 'undefined'){
+      window.lastSummary = summary;
+    }
     renderSummaryBasics(summary);
     let statusText = '解析完成';
     if(summary?.samplingNote === true){
@@ -201,10 +177,8 @@ function onWorkerMessage(e){
     }
     $('#status').textContent = statusText;
     renderMonthlyTiles(summary);
-    renderKeywords(summary);
     setParsingState(false);
   } else if(type==='error'){
-    clearParseDebounce();
     $('#status').textContent = data.message || '未知错误';
     setParsingState(false);
   }
@@ -224,51 +198,6 @@ function formatMB(bytes){
 function formatCount(value){
   if(!Number.isFinite(value)){ return '0'; }
   return Math.trunc(value).toLocaleString();
-}
-
-function renderKeywords(summary){
-  const modeTextEl = $('#modeText');
-  const radioMode = document.querySelector('input[name="filter"]:checked');
-  const displayMode = radioMode?.value || summary?.mode || defaults.filter;
-  if(modeTextEl){
-    modeTextEl.textContent = displayMode;
-  }
-
-  const titleEl = modeTextEl?.closest('.h2');
-  if(titleEl){
-    let noteEl = titleEl.querySelector('.kw-sampling-note');
-    if(summary?.samplingNote === true){
-      if(!noteEl){
-        noteEl = document.createElement('span');
-        noteEl.className = 'kw-sampling-note';
-        titleEl.appendChild(noteEl);
-      }
-      noteEl.textContent = ' （sampling based）';
-    }else if(noteEl){
-      noteEl.remove();
-    }
-  }
-
-  const container = $('#kw');
-  if(!container){ return; }
-  container.innerHTML = '';
-
-  const keywords = Array.isArray(summary?.keywords) ? summary.keywords.slice(0, 10) : [];
-  if(!keywords.length){ return; }
-
-  const fragment = document.createDocumentFragment();
-  for(const item of keywords){
-    const term = String(item?.term ?? '').trim();
-    if(!term){ continue; }
-    const countRaw = Number(item?.count);
-    const countText = Number.isFinite(countRaw) ? formatCount(countRaw) : '0';
-    const badge = document.createElement('span');
-    badge.className = 'badge';
-    badge.textContent = `${term} (${countText})`;
-    fragment.appendChild(badge);
-  }
-
-  container.appendChild(fragment);
 }
 
 function renderSummaryBasics(summary){
