@@ -13,7 +13,7 @@ function spawnWorker(){
   if(state.worker){
     state.worker.terminate();
   }
-  state.worker = new Worker('./parser.worker.js?v=35', { type: 'module' });
+  state.worker = new Worker('./parser.worker.js?v=39', { type: 'module' });
   state.worker.onmessage = onWorkerMessage;
 }
 
@@ -44,7 +44,7 @@ const timeMetrics = setupTimeElements();
 const streakMetrics = setupStreakElements();
 const highlights = setupHighlightElements();
 
-renderHighlights(null);
+renderHighlights();
 
 // —— 读取与应用偏好
 function loadPrefs(){
@@ -106,8 +106,7 @@ function setupStreakElements(){
 
 function setupHighlightElements(){
   return {
-    topDays: $('#hlTopDays'),
-    ratios: $('#hlRatios')
+    topDays: $('#hlTopDays')
   };
 }
 
@@ -187,7 +186,7 @@ function onWorkerMessage(e){
     }
     $('#status').textContent = statusText;
     renderMonthlyTiles(summary);
-    renderHighlights(summary);
+    renderHighlights();
     setParsingState(false);
   } else if(type==='error'){
     $('#status').textContent = data.message || '未知错误';
@@ -545,58 +544,36 @@ function renderMonthlyTiles(summary){
   container.appendChild(fragment);
 }
 
-function renderHighlights(summary){
-  const topDaysEl = highlights?.topDays;
-  if(!topDaysEl){ return; }
+function renderHighlights(){
+  const grid = document.querySelector('#hlTopDays');
+  if(!grid){ return; }
 
-  const emptyText = 'No activity in the recent 3-month window.';
-  const monthDailyChars = summary?.monthDailyChars;
-  if(!monthDailyChars || Object.keys(monthDailyChars).length === 0){
-    topDaysEl.textContent = emptyText;
+  const s = (window.state && window.state.lastSummary) || window.lastSummary || {};
+  const map = s.monthDailyChars || {};
+  // Convert map to [{date, chars}]
+  const items = Object.entries(map).map(([date, chars]) => ({
+    date,
+    chars: Number(chars) || 0
+  }));
+
+  // Sort: chars desc, date asc; take top 10
+  items.sort((a, b) => (b.chars - a.chars) || (a.date > b.date ? 1 : -1));
+  const top10 = items.slice(0, 10);
+
+  // Render
+  grid.innerHTML = '';
+  if(top10.length === 0){
+    grid.textContent = '最近三个月没有可显示的活跃日。';
     return;
   }
-
-  const entries = Object.entries(monthDailyChars)
-    .map(([date, value]) => ({ date, chars: Number(value) }))
-    .filter(item => Number.isFinite(item.chars));
-
-  if(entries.length === 0){
-    topDaysEl.textContent = emptyText;
-    return;
-  }
-
-  entries.sort((a, b) => {
-    if(b.chars !== a.chars){
-      return b.chars - a.chars;
-    }
-    return a.date.localeCompare(b.date);
+  const fmt = new Intl.NumberFormat();
+  top10.forEach((it, idx) => {
+    const tile = document.createElement('div');
+    tile.className = 'hl-tile' + (idx === 0 ? ' hl-top1' : '');
+    tile.innerHTML = `
+      <div class="hl-date">${it.date}</div>
+      <div class="hl-chars">${fmt.format(it.chars)}</div>
+    `;
+    grid.appendChild(tile);
   });
-
-  const topTen = entries.slice(0, 10);
-  if(!topTen.length){
-    topDaysEl.textContent = emptyText;
-    return;
-  }
-
-  const fragment = document.createDocumentFragment();
-
-  topTen.forEach(item => {
-    const row = document.createElement('div');
-    row.className = 'hl-item';
-
-    const dateSpan = document.createElement('span');
-    dateSpan.className = 'hl-date';
-    dateSpan.textContent = item.date;
-    row.appendChild(dateSpan);
-
-    const valueSpan = document.createElement('span');
-    valueSpan.className = 'hl-val';
-    valueSpan.textContent = numberFormatter.format(Math.trunc(item.chars));
-    row.appendChild(valueSpan);
-
-    fragment.appendChild(row);
-  });
-
-  topDaysEl.innerHTML = '';
-  topDaysEl.appendChild(fragment);
 }
