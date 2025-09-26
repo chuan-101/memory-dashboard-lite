@@ -13,7 +13,7 @@ function spawnWorker(){
   if(state.worker){
     state.worker.terminate();
   }
-  state.worker = new Worker('./parser.worker.js?v=35', { type: 'module' });
+  state.worker = new Worker('./parser.worker.js?v=38', { type: 'module' });
   state.worker.onmessage = onWorkerMessage;
 }
 
@@ -557,16 +557,16 @@ function renderHighlights(summary){
     return;
   }
 
-  const entries = Object.entries(monthDailyChars)
-    .map(([date, value]) => ({ date, chars: Number(value) }))
+  const items = Object.entries(monthDailyChars)
+    .map(([date, chars]) => ({ date, chars: Number(chars) }))
     .filter(item => Number.isFinite(item.chars));
 
-  if(entries.length === 0){
+  if(items.length === 0){
     topDaysEl.textContent = emptyText;
     return;
   }
 
-  entries.sort((a, b) => {
+  items.sort((a, b) => {
     if(b.chars !== a.chars){
       return b.chars - a.chars;
     }
