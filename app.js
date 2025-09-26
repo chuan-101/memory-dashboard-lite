@@ -1,40 +1,22 @@
 const $ = (s)=>document.querySelector(s);
 const LS = {user:'md_user_name', asst:'md_asst_name', theme:'md_theme'};
 const defaults = {user:'Me', asst:'GPT', theme:'Echoes'};
+let lastSummary = null;
 let currentNames = {user: defaults.user, asst: defaults.asst};
 
 const state = {
   file: null,
   worker: null,
-  parseDebounceTimer: null,
-  lastSummary: null
+  parseDebounceTimer: null
 };
 
-// ---- UI helpers (single source of truth) ----
-const els = {
-  status: document.querySelector('#status'),
-  download: document.querySelector('#downloadCsv'),
-  cancel: document.querySelector('#cancelParse')
-};
-
-function setParsingState(parsing){
-  const isParsing = Boolean(parsing);
-  if(els.cancel){
-    els.cancel.disabled = !isParsing;
-  }
-  if(els.download){
-    els.download.disabled = isParsing || !state.lastSummary;
-  }
-  if(document.body){
-    document.body.classList.toggle('is-parsing', isParsing);
-  }
-}
+const downloadButton = $('#downloadCsv');
 
 function spawnWorker(){
   if(state.worker){
     state.worker.terminate();
   }
-  state.worker = new Worker('./parser.worker.js?v=25', {type:'module'});
+  state.worker = new Worker('./parser.worker.js?v=24', {type:'module'});
   state.worker.onmessage = onWorkerMessage;
 }
 
@@ -46,24 +28,57 @@ function startParse(){
     return;
   }
   clearParseDebounce();
-  if(els.status){
-    els.status.textContent = 'Parsing…';
-  }
+  $('#status').textContent = 'Parsing…';
   spawnWorker();
   if(state.worker){
     setParsingState(true);
+    setDownloadEnabled(false);
     state.worker.postMessage({type:'parse', file: state.file});
   }else{
-    setParsingState(false);
+    setCancelEnabled(false);
   }
 }
 
-if(els.download){
-  els.download.addEventListener('click', onDownloadCsv);
+function setParsingState(isParsing){
+  const active = Boolean(isParsing);
+  document.body?.classList.toggle('is-parsing', active);
+  setCancelEnabled(active);
+  if(!active){
+    clearParseDebounce();
+  }
 }
 
-if(els.cancel){
-  els.cancel.addEventListener('click', onCancelParse);
+if(downloadButton){
+  downloadButton.addEventListener('click', onDownloadCsv);
+  setDownloadEnabled(Boolean(lastSummary));
+}
+
+if(cancelButton){
+  cancelButton.addEventListener('click', onCancelParse);
+  setCancelEnabled(false);
+}
+
+function setDownloadEnabled(canDownload){
+  if(downloadButton){
+    downloadButton.disabled = !canDownload;
+  }
+}
+
+function setCancelEnabled(isEnabled){
+  if(cancelButton){
+    cancelButton.disabled = !isEnabled;
+  }
+}
+
+if(downloadButton){
+  downloadButton.addEventListener('click', onDownloadCsv);
+  setDownloadEnabled(Boolean(lastSummary));
+}
+
+function setDownloadEnabled(canDownload){
+  if(downloadButton){
+    downloadButton.disabled = !canDownload;
+  }
 }
 
 setParsingState(false);
@@ -94,8 +109,8 @@ function applyNames(p){
   $('#nameU2').textContent = p.user; $('#nameA2').textContent = p.asst;
   $('#userName').value = p.user; $('#assistantName').value = p.asst;
   currentNames = {user: p.user, asst: p.asst};
-  if(state.lastSummary){
-    renderSummaryBasics(state.lastSummary);
+  if(lastSummary){
+    renderSummaryBasics(lastSummary);
   }
 }
 function applyTheme(theme){
@@ -215,13 +230,20 @@ function onWorkerMessage(e){
     if(typeof window !== 'undefined'){
       window.lastSummary = summary;
     }
+    setDownloadEnabled(Boolean(summary));
     renderSummaryBasics(summary);
+    let statusText = '解析完成';
+    if(summary?.samplingNote === true){
+      statusText += '（性能保护：基于抽样）';
+    }
+    if(els.status){
+      els.status.textContent = statusText;
+    }
     renderMonthlyTiles(summary);
     if(els.status){
       els.status.textContent = summary?.samplingNote ? '解析完成（性能保护：基于抽样）' : '解析完成';
     }
     setParsingState(false);
-    clearParseDebounce();
     if(state.worker){
       state.worker.terminate();
       state.worker = null;
@@ -231,12 +253,9 @@ function onWorkerMessage(e){
       els.status.textContent = data.message || '未知错误';
     }
     setParsingState(false);
-    clearParseDebounce();
-    if(state.worker){
-      state.worker.terminate();
-      state.worker = null;
-    }
+    setDownloadEnabled(Boolean(lastSummary));
   }
+  setParsingState(false);
 }
 
 function onCancelParse(){
@@ -245,13 +264,8 @@ function onCancelParse(){
   }
   state.worker = null;
   clearParseDebounce();
-  state.lastSummary = null;
-  if(typeof window !== 'undefined'){
-    window.lastSummary = null;
-  }
-  if(els.status){
-    els.status.textContent = 'Canceled.';
-  }
+  $('#status').textContent = 'Canceled.';
+  setDownloadEnabled(Boolean(lastSummary));
   setParsingState(false);
 }
 
@@ -613,10 +627,10 @@ function renderMonthlyTiles(summary){
 }
 
 function onDownloadCsv(){
-  if(!state.lastSummary){ return; }
+  if(!lastSummary){ return; }
   const names = currentNames || defaults;
-  const summaryCsv = buildSummaryCsv(state.lastSummary, names);
-  const dailyCsv = buildDailyCharsCsv(state.lastSummary);
+  const summaryCsv = buildSummaryCsv(lastSummary, names);
+  const dailyCsv = buildDailyCharsCsv(lastSummary);
   triggerCsvDownload('summary.csv', summaryCsv);
   triggerCsvDownload('daily_chars_recent3m.csv', dailyCsv);
 }
