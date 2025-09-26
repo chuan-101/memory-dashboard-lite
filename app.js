@@ -3,6 +3,45 @@ const LS = {user:'md_user_name', asst:'md_asst_name', filter:'md_filter_mode', t
 const defaults = {user:'Me', asst:'GPT', filter:'simple', theme:'Echoes'};
 let lastSummary = null;
 
+const state = {
+  file: null,
+  worker: null,
+  parseDebounceTimer: null
+};
+
+function clearParseDebounce(){
+  if(state.parseDebounceTimer){
+    clearTimeout(state.parseDebounceTimer);
+    state.parseDebounceTimer = null;
+  }
+}
+
+function spawnWorker(){
+  if(state.worker){
+    state.worker.terminate();
+  }
+  state.worker = new Worker('./parser.worker.js?v=19', {type:'module'});
+  state.worker.onmessage = onWorkerMessage;
+}
+
+function startParse(mode){
+  if(!state.file){
+    $('#status').textContent = 'Please choose a JSON file first';
+    return;
+  }
+  $('#status').textContent = 'Parsing…';
+  clearParseDebounce();
+  spawnWorker();
+  if(state.worker){
+    setParsingState(true);
+    state.worker.postMessage({type:'parse', file: state.file, mode});
+  }
+}
+
+function setParsingState(isParsing){
+  document.body?.classList.toggle('is-parsing', Boolean(isParsing));
+}
+
 const nameUserEl = $('#nameU');
 const nameAssistantEl = $('#nameA');
 const overviewMetrics = {
@@ -106,7 +145,8 @@ document.querySelectorAll('input[name="filter"]').forEach(r=>{
     const mode = r.value;
     localStorage.setItem(LS.filter, mode);
     applyFilter(mode);
-    scheduleModeReparse(mode);
+    clearParseDebounce();
+    state.parseDebounceTimer = setTimeout(()=> startParse(mode), 300);
   };
 });
 
@@ -120,21 +160,22 @@ document.querySelectorAll('.theme').forEach(btn=>{
 });
 
 // —— 文件与预检（保持原有逻辑）
-let fileHandle = null;
-$('#file').onchange = (e)=>{ fileHandle = e.target.files?.[0] || null; $('#status').textContent = fileHandle? `已选择：${fileHandle.name}`:'未加载文件'; };
-
-$('#runPrecheck').onclick = ()=>{
-  if(!fileHandle){ $('#status').textContent = '请先选择 JSON 文件'; return; }
-  if(parseDebounceTimer){
-    clearTimeout(parseDebounceTimer);
-    parseDebounceTimer = null;
-  }
-  $('#status').textContent = '预检中…';
-  const activeWorker = getWorker();
-  activeWorker.postMessage({type:'precheck', file:fileHandle});
+$('#file').onchange = (e)=>{
+  state.file = e.target.files?.[0] || null;
+  $('#status').textContent = state.file ? `已选择：${state.file.name}` : '未加载文件';
 };
 
-function handleWorkerMessage(e){
+$('#runPrecheck').onclick = ()=>{
+  if(!state.file){ $('#status').textContent = '请先选择 JSON 文件'; return; }
+  clearParseDebounce();
+  $('#status').textContent = '预检中…';
+  spawnWorker();
+  if(state.worker){
+    state.worker.postMessage({type:'precheck', file: state.file});
+  }
+};
+
+function onWorkerMessage(e){
   const data = e.data || {};
   const {type} = data;
   if(type==='precheck'){
@@ -142,16 +183,15 @@ function handleWorkerMessage(e){
     $('#status').textContent = ok ? `预检通过：检测到 ChatGPT 导出结构${hint?`（${hint}）`:''}` : `预检失败：${reason || '未知原因'}`;
     if(ok){
       const mode = localStorage.getItem(LS.filter) || defaults.filter;
-      $('#status').textContent = 'Precheck passed, parsing…';
-      setParsingState(true);
-      const activeWorker = getWorker();
-      activeWorker.postMessage({ type:'parse', file:fileHandle, mode });
+      startParse(mode);
+      $('#status').textContent = '预检通过，开始解析…';
     }
   } else if(type==='progress'){
     const {pct = 0, loadedBytes = 0, totalBytes = 0} = data;
     const pctText = clampPct(pct);
     $('#status').textContent = `${pctText}% (${formatMB(loadedBytes)}/${formatMB(totalBytes)} MB)`;
   } else if(type==='done'){
+    clearParseDebounce();
     const {summary = null} = data;
     lastSummary = summary;
     renderSummaryBasics(summary);
@@ -162,11 +202,9 @@ function handleWorkerMessage(e){
     $('#status').textContent = statusText;
     renderMonthlyTiles(summary);
     renderKeywords(summary);
+    setParsingState(false);
   } else if(type==='error'){
-    if(parseDebounceTimer){
-      clearTimeout(parseDebounceTimer);
-      parseDebounceTimer = null;
-    }
+    clearParseDebounce();
     $('#status').textContent = data.message || '未知错误';
     setParsingState(false);
   }
