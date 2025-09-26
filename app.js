@@ -106,8 +106,7 @@ function setupStreakElements(){
 
 function setupHighlightElements(){
   return {
-    topDays: $('#hlTopDays'),
-    ratios: $('#hlRatios')
+    topDays: $('#hlTopDays')
   };
 }
 
