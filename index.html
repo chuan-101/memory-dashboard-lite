@@ -61,6 +61,7 @@ h1{ font-size:28px; font-weight:800; letter-spacing:.2px; margin:0 0 16px }
 .row{ display:flex; gap:10px; flex-wrap:wrap; align-items:center }
 .input{ padding:8px 10px; border:none; border-radius:12px; background:var(--surface); color:var(--text) }
 button{ padding:8px 12px; border:none; border-radius:12px; background:var(--accent); color:var(--accent-contrast); cursor:pointer; font-weight:600 }
+button:disabled{ opacity:.5; cursor:not-allowed }
 button.ghost{ background:var(--surface); color:var(--text) }
 .theme{ font-weight:700; padding:6px 10px }
 .theme[aria-pressed="true"]{ outline:2px solid var(--accent) }
@@ -128,6 +129,7 @@ body[data-theme="Emotion"]{
     <div class="row">
       <input type="file" id="file" class="input" accept=".json">
       <button id="runPrecheck">结构预检</button>
+      <button id="downloadCsv" disabled>Download CSV</button>
       <span id="status" class="muted">未加载文件</span>
     </div>
   </div>

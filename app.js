@@ -2,11 +2,14 @@ const $ = (s)=>document.querySelector(s);
 const LS = {user:'md_user_name', asst:'md_asst_name', theme:'md_theme'};
 const defaults = {user:'Me', asst:'GPT', theme:'Echoes'};
 let lastSummary = null;
+let currentNames = {user: defaults.user, asst: defaults.asst};
 
 const state = {
   file: null,
   worker: null
 };
+
+const downloadButton = $('#downloadCsv');
 
 function spawnWorker(){
   if(state.worker){
@@ -26,12 +29,24 @@ function startParse(){
   spawnWorker();
   if(state.worker){
     setParsingState(true);
+    setDownloadEnabled(false);
     state.worker.postMessage({type:'parse', file: state.file});
   }
 }
 
 function setParsingState(isParsing){
   document.body?.classList.toggle('is-parsing', Boolean(isParsing));
+}
+
+if(downloadButton){
+  downloadButton.addEventListener('click', onDownloadCsv);
+  setDownloadEnabled(Boolean(lastSummary));
+}
+
+function setDownloadEnabled(canDownload){
+  if(downloadButton){
+    downloadButton.disabled = !canDownload;
+  }
 }
 
 const nameUserEl = $('#nameU');
@@ -59,6 +74,7 @@ function applyNames(p){
   if(nameAssistantEl){ nameAssistantEl.textContent = p.asst; }
   $('#nameU2').textContent = p.user; $('#nameA2').textContent = p.asst;
   $('#userName').value = p.user; $('#assistantName').value = p.asst;
+  currentNames = {user: p.user, asst: p.asst};
   if(lastSummary){
     renderSummaryBasics(lastSummary);
   }
@@ -170,6 +186,7 @@ function onWorkerMessage(e){
     if(typeof window !== 'undefined'){
       window.lastSummary = summary;
     }
+    setDownloadEnabled(Boolean(summary));
     renderSummaryBasics(summary);
     let statusText = '解析完成';
     if(summary?.samplingNote === true){
@@ -181,6 +198,7 @@ function onWorkerMessage(e){
   } else if(type==='error'){
     $('#status').textContent = data.message || '未知错误';
     setParsingState(false);
+    setDownloadEnabled(Boolean(lastSummary));
   }
 }
 
@@ -532,4 +550,150 @@ function renderMonthlyTiles(summary){
 
   container.innerHTML = '';
   container.appendChild(fragment);
+}
+
+function onDownloadCsv(){
+  if(!lastSummary){ return; }
+  const names = currentNames || defaults;
+  const summaryCsv = buildSummaryCsv(lastSummary, names);
+  const dailyCsv = buildDailyCharsCsv(lastSummary);
+  triggerCsvDownload('summary.csv', summaryCsv);
+  triggerCsvDownload('daily_chars_recent3m.csv', dailyCsv);
+}
+
+function buildSummaryCsv(summary, names){
+  const userName = ensureName(names?.user, defaults.user);
+  const assistantName = ensureName(names?.asst, defaults.asst);
+  const headers = [
+    `${userName} chars`,
+    `${userName} msgs`,
+    `${assistantName} chars`,
+    `${assistantName} msgs`,
+    'earliest_local (YYYY-MM-DD HH:mm)',
+    'hot_time_slots_local',
+    'hot_time_count',
+    'current_streak_days',
+    'current_streak_start',
+    'current_streak_end',
+    'max_streak_days',
+    'max_streak_start',
+    'max_streak_end'
+  ];
+
+  const earliestLocal = formatEarliestLocal(summary?.earliestTs);
+  const hotDetails = getHotSlotDetails(summary?.timeOfDay);
+  const streaks = calcStreaks(summary?.dayActive);
+  const currentRun = streaks?.now || null;
+  const maxRun = streaks?.max || null;
+
+  const values = [
+    toSafeInteger(summary?.totalChars?.user),
+    toSafeInteger(summary?.totalMsgs?.user),
+    toSafeInteger(summary?.totalChars?.assistant),
+    toSafeInteger(summary?.totalMsgs?.assistant),
+    earliestLocal,
+    hotDetails.ranges.join(', '),
+    hotDetails.count,
+    currentRun?.length || 0,
+    formatDateForCsv(currentRun?.start),
+    formatDateForCsv(currentRun?.end),
+    maxRun?.length || 0,
+    formatDateForCsv(maxRun?.start),
+    formatDateForCsv(maxRun?.end)
+  ];
+
+  return `${toCsvLine(headers)}\n${toCsvLine(values)}\n`;
+}
+
+function formatEarliestLocal(ts){
+  if(ts === undefined || ts === null){ return ''; }
+  const dt = new Date(ts);
+  if(Number.isNaN(dt.getTime())){ return ''; }
+  dt.setMinutes(0, 0, 0);
+  const year = dt.getFullYear();
+  const month = String(dt.getMonth() + 1).padStart(2, '0');
+  const day = String(dt.getDate()).padStart(2, '0');
+  const hour = String(dt.getHours()).padStart(2, '0');
+  const minute = String(dt.getMinutes()).padStart(2, '0');
+  return `${year}-${month}-${day} ${hour}:${minute}`;
+}
+
+function getHotSlotDetails(timeOfDay){
+  if(!Array.isArray(timeOfDay) || timeOfDay.length !== 8){
+    return {ranges: [], count: 0};
+  }
+  const values = timeOfDay.map(v => Number(v) || 0);
+  const maxVal = Math.max(...values);
+  if(maxVal <= 0){
+    return {ranges: [], count: 0};
+  }
+  const tzOffsetMinutes = -new Date().getTimezoneOffset();
+  const ranges = values
+    .map((val, idx) => ({val, idx}))
+    .filter(item => item.val === maxVal)
+    .map(item => {
+      const utcStartMin = item.idx * 180;
+      const localStartMin = (utcStartMin + tzOffsetMinutes + 1440) % 1440;
+      return {start: localStartMin, label: formatSlotRange(localStartMin)};
+    })
+    .sort((a, b) => a.start - b.start)
+    .map(item => item.label);
+  return {ranges, count: Math.round(maxVal)};
+}
+
+function formatDateForCsv(dateStr){
+  if(!dateStr){ return ''; }
+  return formatLocalDate(dateStr);
+}
+
+function buildDailyCharsCsv(summary){
+  const monthDailyChars = summary?.monthDailyChars || {};
+  const dates = Object.keys(monthDailyChars).sort();
+  const lines = dates.map(date => {
+    const chars = toSafeInteger(monthDailyChars[date]);
+    return toCsvLine([date, chars]);
+  });
+  const header = toCsvLine(['date', 'chars']);
+  return [header, ...lines].join('\n') + '\n';
+}
+
+function toCsvLine(values){
+  return values.map(escapeCsvValue).join(',');
+}
+
+function escapeCsvValue(value){
+  if(value === null || value === undefined){ return ''; }
+  const str = String(value);
+  if(str.includes('"') || str.includes(',') || str.includes('\n')){
+    return `"${str.replace(/"/g, '""')}"`;
+  }
+  return str;
+}
+
+function toSafeInteger(value){
+  const num = Number(value);
+  if(!Number.isFinite(num)){ return 0; }
+  return Math.round(num);
+}
+
+function ensureName(name, fallback){
+  const str = typeof name === 'string' ? name.trim() : '';
+  return str || fallback;
+}
+
+function triggerCsvDownload(filename, content){
+  try{
+    const blob = new Blob([content], {type: 'text/csv;charset=utf-8;'});
+    const link = document.createElement('a');
+    link.href = URL.createObjectURL(blob);
+    link.download = filename;
+    document.body.appendChild(link);
+    link.click();
+    setTimeout(()=>{
+      URL.revokeObjectURL(link.href);
+      link.remove();
+    }, 0);
+  }catch(err){
+    console.error('CSV download failed', err);
+  }
 }
