@@ -163,6 +163,10 @@ function handleWorkerMessage(e){
     renderMonthlyTiles(summary);
     renderKeywords(summary);
   } else if(type==='error'){
+    if(parseDebounceTimer){
+      clearTimeout(parseDebounceTimer);
+      parseDebounceTimer = null;
+    }
     $('#status').textContent = data.message || '未知错误';
     setParsingState(false);
   }
