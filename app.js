@@ -13,7 +13,7 @@ function spawnWorker(){
   if(state.worker){
     state.worker.terminate();
   }
-  state.worker = new Worker('./parser.worker.js?v=39', { type: 'module' });
+  state.worker = new Worker('./parser.worker.js?v=38', { type: 'module' });
   state.worker.onmessage = onWorkerMessage;
 }
 
@@ -548,32 +548,54 @@ function renderHighlights(){
   const grid = document.querySelector('#hlTopDays');
   if(!grid){ return; }
 
-  const s = (window.state && window.state.lastSummary) || window.lastSummary || {};
-  const map = s.monthDailyChars || {};
-  // Convert map to [{date, chars}]
-  const items = Object.entries(map).map(([date, chars]) => ({
-    date,
-    chars: Number(chars) || 0
-  }));
+  const emptyText = '最近三个月没有可显示的活跃日。';
+  const monthDailyChars = summary?.monthDailyChars;
+  topDaysEl.innerHTML = '';
 
-  // Sort: chars desc, date asc; take top 10
-  items.sort((a, b) => (b.chars - a.chars) || (a.date > b.date ? 1 : -1));
-  const top10 = items.slice(0, 10);
-
-  // Render
-  grid.innerHTML = '';
-  if(top10.length === 0){
-    grid.textContent = '最近三个月没有可显示的活跃日。';
+  if(!monthDailyChars || Object.keys(monthDailyChars).length === 0){
+    topDaysEl.textContent = emptyText;
     return;
   }
-  const fmt = new Intl.NumberFormat();
-  top10.forEach((it, idx) => {
-    const tile = document.createElement('div');
-    tile.className = 'hl-tile' + (idx === 0 ? ' hl-top1' : '');
-    tile.innerHTML = `
-      <div class="hl-date">${it.date}</div>
-      <div class="hl-chars">${fmt.format(it.chars)}</div>
-    `;
-    grid.appendChild(tile);
+
+  const items = Object.entries(monthDailyChars)
+    .map(([date, chars]) => ({ date, chars: Number(chars) }))
+    .filter(item => Number.isFinite(item.chars));
+
+  if(items.length === 0){
+    topDaysEl.textContent = emptyText;
+    return;
+  }
+
+  items.sort((a, b) => {
+    if(b.chars !== a.chars){
+      return b.chars - a.chars;
+    }
+    return a.date.localeCompare(b.date);
   });
+
+  const topTen = entries.slice(0, 10);
+  if(topTen.length === 0){
+    topDaysEl.textContent = emptyText;
+    return;
+  }
+
+  const fmt = new Intl.NumberFormat();
+  const fragment = document.createDocumentFragment();
+
+  topTen.forEach((item, idx) => {
+    const tile = document.createElement('div');
+    let extraClass = '';
+    if(idx === 0){
+      extraClass = ' hl-top1';
+    } else if(idx === 1){
+      extraClass = ' hl-top2';
+    } else if(idx === 2){
+      extraClass = ' hl-top3';
+    }
+    tile.className = `hl-tile${extraClass}`;
+    tile.innerHTML = `<div class="hl-date">${item.date}</div><div class="hl-chars">${fmt.format(item.chars)}</div>`;
+    fragment.appendChild(tile);
+  });
+
+  topDaysEl.appendChild(fragment);
 }
