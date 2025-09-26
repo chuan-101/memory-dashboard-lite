@@ -2,9 +2,6 @@ const $ = (s)=>document.querySelector(s);
 const LS = {user:'md_user_name', asst:'md_asst_name', filter:'md_filter_mode', theme:'md_theme'};
 const defaults = {user:'Me', asst:'GPT', filter:'simple', theme:'Echoes'};
 let lastSummary = null;
-const WORKER_BASE_URL = './parser.worker.js?v=7';
-let worker = null;
-let parseDebounceTimer = null;
 
 const nameUserEl = $('#nameU');
 const nameAssistantEl = $('#nameA');
@@ -39,56 +36,6 @@ function applyNames(p){
 function applyFilter(mode){
   document.querySelectorAll('input[name="filter"]').forEach(r=>r.checked=(r.value===mode));
   renderKeywords(lastSummary);
-}
-
-function setParsingState(active){
-  document.querySelectorAll('input[name="filter"]').forEach(r=>{ r.disabled = active; });
-}
-
-function buildWorkerUrl(cacheBust){
-  if(!cacheBust){ return WORKER_BASE_URL; }
-  const separator = WORKER_BASE_URL.includes('?') ? '&' : '?';
-  return `${WORKER_BASE_URL}${separator}t=${Date.now()}`;
-}
-
-function getWorker(options = {}){
-  const {fresh = false, cacheBust = false} = options;
-  if(worker && fresh){
-    worker.terminate();
-    worker = null;
-  }
-  if(!worker){
-    worker = new Worker(buildWorkerUrl(cacheBust), {type:'module'});
-    worker.onmessage = handleWorkerMessage;
-    worker.onerror = handleWorkerError;
-  }
-  return worker;
-}
-
-function handleWorkerError(event){
-  console.error(event);
-  if(parseDebounceTimer){
-    clearTimeout(parseDebounceTimer);
-    parseDebounceTimer = null;
-  }
-  $('#status').textContent = event?.message || '解析出错';
-  setParsingState(false);
-}
-
-function scheduleModeReparse(mode){
-  if(!fileHandle){ return; }
-  if(parseDebounceTimer){
-    clearTimeout(parseDebounceTimer);
-    parseDebounceTimer = null;
-  }
-  parseDebounceTimer = setTimeout(()=>{
-    parseDebounceTimer = null;
-    if(!fileHandle){ return; }
-    $('#status').textContent = 'Re-parsing for keyword mode…';
-    setParsingState(true);
-    const activeWorker = getWorker({fresh:true, cacheBust:true});
-    activeWorker.postMessage({ type:'parse', file:fileHandle, mode });
-  }, 300);
 }
 function applyTheme(theme){
   document.body.setAttribute('data-theme', theme);
@@ -206,10 +153,6 @@ function handleWorkerMessage(e){
     $('#status').textContent = `${pctText}% (${formatMB(loadedBytes)}/${formatMB(totalBytes)} MB)`;
   } else if(type==='done'){
     const {summary = null} = data;
-    if(parseDebounceTimer){
-      clearTimeout(parseDebounceTimer);
-      parseDebounceTimer = null;
-    }
     lastSummary = summary;
     renderSummaryBasics(summary);
     let statusText = '解析完成';
@@ -219,7 +162,6 @@ function handleWorkerMessage(e){
     $('#status').textContent = statusText;
     renderMonthlyTiles(summary);
     renderKeywords(summary);
-    setParsingState(false);
   } else if(type==='error'){
     if(parseDebounceTimer){
       clearTimeout(parseDebounceTimer);
@@ -273,58 +215,22 @@ function renderKeywords(summary){
   if(!container){ return; }
   container.innerHTML = '';
 
-  const keywordArray = Array.isArray(summary?.keywords) ? summary.keywords.slice() : [];
-  if(keywordArray.length === 0){
-    const empty = document.createElement('div');
-    empty.className = 'muted';
-    empty.textContent = 'No keywords in the recent 3-month window.';
-    container.appendChild(empty);
-    return;
-  }
+  const keywords = Array.isArray(summary?.keywords) ? summary.keywords.slice(0, 10) : [];
+  if(!keywords.length){ return; }
 
-  keywordArray.sort((a, b)=>{
-    const aCount = Number.isFinite(Number(a?.count)) ? Number(a.count) : 0;
-    const bCount = Number.isFinite(Number(b?.count)) ? Number(b.count) : 0;
-    if(bCount !== aCount){
-      return bCount - aCount;
-    }
-    const aTerm = String(a?.term ?? '').trim();
-    const bTerm = String(b?.term ?? '').trim();
-    return aTerm.localeCompare(bTerm);
-  });
-
-  const topKeywords = keywordArray.slice(0, 10);
   const fragment = document.createDocumentFragment();
-  topKeywords.forEach((item, index)=>{
+  for(const item of keywords){
     const term = String(item?.term ?? '').trim();
-    if(!term){ return; }
+    if(!term){ continue; }
     const countRaw = Number(item?.count);
-    const safeCount = Number.isFinite(countRaw) ? countRaw : 0;
-    const countText = formatCount(safeCount);
+    const countText = Number.isFinite(countRaw) ? formatCount(countRaw) : '0';
     const badge = document.createElement('span');
-    badge.className = 'kw-badge';
-    if(index < 3){
-      badge.classList.add('strong');
-    }
+    badge.className = 'badge';
     badge.textContent = `${term} (${countText})`;
-    badge.setAttribute('aria-label', `Keyword: ${term}, count ${safeCount}`);
     fragment.appendChild(badge);
-  });
-
-  if(fragment.childNodes.length === 0){
-    const empty = document.createElement('div');
-    empty.className = 'muted';
-    empty.textContent = 'No keywords in the recent 3-month window.';
-    container.appendChild(empty);
-    return;
   }
 
   container.appendChild(fragment);
-
-  const totalLine = document.createElement('div');
-  totalLine.className = 'kw-total muted';
-  totalLine.textContent = `Total unique terms: ${formatCount(keywordArray.length)}`;
-  container.appendChild(totalLine);
 }
 
 function renderSummaryBasics(summary){
