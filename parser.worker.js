@@ -98,9 +98,10 @@ function summarizeFile(raw, {fileSize}){
   summary.debug.recentWindow = { startLocal: kwWindow.startLocal, endLocal: kwWindow.endLocal };
   const keywordCounter = createKeywordCounter({
     mode,
+    windowStart: kwWindow.startMs,
+    windowEnd: kwWindow.endMs,
     debug: summary.debug.kw
   });
-  const feedKeywords = (text)=> keywordCounter.feed(text);
 
   const handleMessage = (msg)=>{
     if(!msg || typeof msg !== 'object') return false;
@@ -144,6 +145,8 @@ function summarizeFile(raw, {fileSize}){
       if(inWindow && visibleText){
         feedKeywords(visibleText, mode);
       }
+
+      keywordCounter.feed(text, ts);
     }
     return true;
   };
@@ -194,7 +197,7 @@ function formatLocalDate(date){
   return `${y}-${m}-${d}`;
 }
 
-function createKeywordCounter({ mode = 'simple', debug }){
+function createKeywordCounter({ mode = 'simple', windowStart, windowEnd, debug }){
   const counts = new Map();
   const encoder = new TextEncoder();
   const tokenPattern = /[\p{Letter}\p{Number}][\p{Letter}\p{Number}\-_'’]*/gu;
@@ -202,8 +205,10 @@ function createKeywordCounter({ mode = 'simple', debug }){
   const minLength = mode === 'simple' ? 3 : 2;
 
   return {
-    feed(text){
+    feed(text, ts){
       if(!text || typeof text !== 'string') return;
+      if(ts == null || (windowStart != null && ts < windowStart) || (windowEnd != null && ts > windowEnd)) return;
+
       debug.msgsInWindow += 1;
       debug.textsBytes += encoder.encode(text).length;
 
