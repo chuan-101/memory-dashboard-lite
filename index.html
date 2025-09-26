@@ -68,12 +68,13 @@ h1{ font-size:28px; font-weight:800; letter-spacing:.2px; margin:0 0 16px }
 @media (max-width:860px){ .hero-grid .hero-time,.hero-grid .hero-streak{ grid-column:span 12 } }
 
 .row{ display:flex; gap:10px; flex-wrap:wrap; align-items:center }
+.theme-row{ justify-content:flex-end; gap:8px; }
+@media (max-width:860px){ .theme-row{ justify-content:flex-start; } }
 .input{ padding:8px 10px; border:none; border-radius:12px; background:var(--surface); color:var(--text) }
 button{ padding:8px 12px; border:none; border-radius:12px; background:var(--accent); color:var(--accent-contrast); cursor:pointer; font-weight:600 }
 button.ghost{ background:var(--surface); color:var(--text) }
 .theme{ font-weight:700; padding:6px 10px }
 .theme[aria-pressed="true"]{ outline:2px solid var(--accent) }
-.badge{ display:inline-block; padding:2px 8px; border-radius:999px; background:var(--accent); color:var(--accent-contrast); font-weight:700 }
 #monthGrid{ display:block; margin-top:12px; }
 .month{ margin:12px 0 16px; }
 .month-title{ font-weight:800; font-size:16px; margin:4px 0 8px; }
@@ -115,22 +116,24 @@ body[data-theme="Emotion"]{
 
   <!-- 控制条 -->
   <div class="card">
+
+    <!-- Row 1: names + Save/Reset -->
     <div class="row">
       <label>我方显示名（user）<input id="userName" class="input" placeholder="Me" type="text"></label>
       <label>对方显示名（assistant）<input id="assistantName" class="input" placeholder="GPT" type="text"></label>
       <button id="saveNames">保存并应用</button>
       <button id="resetNames" class="ghost">重置</button>
-      <span class="badge">仅近三月统计</span>
+      <!-- NOTE: no theme buttons here, no filter/badge here -->
     </div>
-    <div class="row" style="margin-top:8px">
-      <label><input type="radio" name="filter" value="simple" checked> 简单过滤</label>
-      <label><input type="radio" name="filter" value="deep"> 深度过滤</label>
-      <span style="flex:1"></span>
+
+    <!-- Row 2: theme buttons ONLY (right-aligned on desktop) -->
+    <div class="row theme-row">
       <span class="muted">主题：</span>
-      <button class="theme ghost" data-theme="Echoes" aria-pressed="true">Echoes</button>
-      <button class="theme ghost" data-theme="Logic" aria-pressed="false">Logic</button>
+      <button class="theme ghost" data-theme="Echoes" aria-pressed="false">Echoes</button>
+      <button class="theme ghost" data-theme="Logic"  aria-pressed="false">Logic</button>
       <button class="theme ghost" data-theme="Emotion" aria-pressed="false">Emotion</button>
     </div>
+
   </div>
 
   <!-- 文件与预检 -->
@@ -195,6 +198,6 @@ body[data-theme="Emotion"]{
 
   </div>
 
-  <script type="module" src="./app.js?v=rollback"></script>
+  <script type="module" src="./app.js?v=30"></script>
 </body>
 </html>
